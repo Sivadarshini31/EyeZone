@@ -1,5 +1,5 @@
 {
-  "name": "EyeZone: Low Vision Assistant",
+  "name": "Copy of EyeZone: Low Vision Assistant",
   "description": "An AI-powered assistant for individuals with low vision. It extracts text from images and PDFs, converts it to speech in multiple languages, and offers accessibility features like high-contrast modes and magnification.",
   "requestFramePermissions": [
     "camera",
