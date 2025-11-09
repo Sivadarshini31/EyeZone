@@ -24,6 +24,11 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
   const isComponentOpen = useRef(isOpen);
   isComponentOpen.current = isOpen;
 
+  // Use a ref to track the current status to avoid stale closures in callbacks
+  // without causing the callback itself to be recreated on every status change.
+  const statusRef = useRef(status);
+  statusRef.current = status;
+
 
   const startListening = useCallback(() => {
     if (!isComponentOpen.current || !SpeechRecognition) {
@@ -68,26 +73,32 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
       if (event.error === 'not-allowed') {
         setStatus('error');
         setResponseText("Microphone access was denied. Please check your browser settings to enable it for this site.");
-        recognitionRef.current?.stop();
       } else if (event.error === 'no-speech') {
-        if (isComponentOpen.current) {
-            startListening();
-        }
+        // The 'onend' event will fire next and handle the restart gracefully.
+        console.log('No speech detected, waiting for onend handler.');
       }
-      // For 'aborted' errors, we now do nothing here. This prevents the restart loop.
-      // The `onend` handler will manage natural timeouts.
+      // For other errors like 'aborted', we let onend handle it.
     };
     
     recognition.onend = () => {
-      // If recognition ends naturally (e.g., timeout) while listening, restart.
-      if (isComponentOpen.current && status === 'listening') {
-        console.log("AI chat listening timed out, restarting.");
-        startListening();
+      // If recognition ends while we are still in the 'listening' state,
+      // it means there was no successful result (e.g., timeout, no-speech).
+      // We should restart listening.
+      if (isComponentOpen.current && statusRef.current === 'listening') {
+        console.log("AI chat recognition ended, restarting listening.");
+        // Use a small timeout to prevent rapid-fire restart loops on some browsers
+        // which can cause the 'aborted' error.
+        setTimeout(() => {
+          // Double check the condition in case the component was closed during the timeout
+          if (isComponentOpen.current && statusRef.current === 'listening') {
+            startListening();
+          }
+        }, 100);
       }
     };
 
     recognition.start();
-  }, [language, status]); // status is needed to get latest value in onend
+  }, [language]); // Removed 'status' dependency to break the re-render loop
   
   // This effect manages the lifecycle of the speech recognition
   useEffect(() => {

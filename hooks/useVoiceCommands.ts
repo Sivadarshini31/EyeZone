@@ -34,6 +34,7 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
       return;
     }
     
+    // Reset stop flag when enabling.
     stopInProgress.current = false;
 
     const recognition = new SpeechRecognition();
@@ -47,13 +48,20 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
 
     recognition.onend = () => {
       setIsListening(false);
-      // Only restart if not intentionally stopped and still enabled.
-      if (!stopInProgress.current && !permissionDenied) {
-        console.log('Voice recognition ended, will restart.');
-        // A brief delay can prevent frantic restart loops on some browsers
-        setTimeout(() => recognition.start(), 100);
-      } else {
-        console.log('Voice recognition ended intentionally.');
+      // Only restart if not intentionally stopped. A brief delay can prevent frantic 
+      // restart loops on some browsers that could lead to an 'aborted' error.
+      if (!stopInProgress.current) {
+        setTimeout(() => {
+          // Check again inside the timeout, as 'enabled' could have changed,
+          // triggering a cleanup that sets stopInProgress to true.
+          if (!stopInProgress.current) {
+            try {
+              recognition.start();
+            } catch (e) {
+              console.warn("Could not restart recognition, it may have been stopped.", e);
+            }
+          }
+        }, 250); // Using a slightly longer delay for stability.
       }
     };
 
@@ -62,9 +70,10 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
       if (event.error === 'not-allowed') {
         console.error("Microphone permission denied. Voice commands will be disabled.");
         setPermissionDenied(true);
+        // stopInProgress will be set in the cleanup, which will run because `permissionDenied` state changes
       }
-      // For 'aborted' or other errors, the onend handler will attempt a restart,
-      // which is a reasonable recovery strategy.
+      // For 'aborted' or other errors, the onend handler will attempt a restart.
+      // We don't need special logic here; `onend` is the robust recovery mechanism.
     };
 
     recognition.onresult = (event: any) => {
@@ -95,7 +104,8 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
     return () => {
       console.log('Cleaning up voice recognition.');
       stopInProgress.current = true;
-      recognition.onend = null; // Important: prevent restart on intentional stop
+      recognition.onend = null; // Prevent restart on intentional stop
+      recognition.onerror = null; // Prevent error handling on intentional stop
       recognition.stop();
       setIsListening(false);
     };

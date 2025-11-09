@@ -22,7 +22,7 @@ const App: React.FC = () => {
   const [readingRate, setReadingRate] = useState<ReadingRate>(ReadingRate.Normal);
   
   // Voice Command State
-  const [speakCommands, setSpeakCommands] = useState(false);
+  const [speakCommands, setSpeakCommands] = useState(true);
   const [voiceCommandFeedback, setVoiceCommandFeedback] = useState(true);
   const [appLanguage, setAppLanguage] = useState<Language>(Language.English);
   const [voiceAction, setVoiceAction] = useState<string | null>(null);
@@ -209,6 +209,16 @@ const App: React.FC = () => {
               </svg>
             </div>
           )}
+          <button
+            onClick={() => setIsAiChatOpen(true)}
+            onFocus={() => speakText('Open AI Assistant', appLanguage)}
+            aria-label="Open AI Assistant"
+            className="p-2 rounded-full hover:bg-gray-500/20"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.553L16.5 21.75l-.398-1.197a3.375 3.375 0 00-2.456-2.456L12.5 17.25l1.197-.398a3.375 3.375 0 002.456-2.456L16.5 13.5l.398 1.197a3.375 3.375 0 002.456 2.456L20.5 17.25l-1.197.398a3.375 3.375 0 00-2.456 2.456z" />
+            </svg>
+          </button>
           <button
             onClick={() => setIsSettingsOpen(true)}
             onFocus={() => speakText('Open settings', appLanguage)}
