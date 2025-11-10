@@ -11,10 +11,10 @@ if (typeof pdfjsLib !== 'undefined') {
 }
 
 
-const API_KEY = process.env.API_KEY;
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
 if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+  throw new Error("GEMINI_API_KEY environment variable not set");
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
@@ -145,28 +145,29 @@ export const describeImage = async (base64Image: string, targetLang: 'Tamil' | '
   }
 };
 
-export const generateSpeech = async (text: string): Promise<string> => {
+export const generateSpeech = async (text: string, language: 'Tamil' | 'English' = 'English'): Promise<string> => {
   if (!text) return '';
-  // Sanitize text to prevent API errors. The TTS model can be sensitive to unusual
-  // whitespace or control characters from OCR/PDF extraction.
-  // Collapsing all whitespace into single spaces is a robust way to clean the input.
   const sanitizedText = text.replace(/\s+/g, ' ').trim();
 
-  if (!sanitizedText) return ''; // Return if text is only whitespace
+  if (!sanitizedText) return '';
 
   try {
+    const voiceConfig = language === 'Tamil' ? 'Kore' : 'Kore';
+
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
+      model: "gemini-2.5-flash",
       contents: [{ parts: [{ text: sanitizedText }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
+            prebuiltVoiceConfig: { voiceName: voiceConfig },
           },
+          audioEncoding: 'LINEAR16',
         },
       },
     });
+
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     return base64Audio || '';
   } catch (error) {

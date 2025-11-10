@@ -122,13 +122,11 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
         let audioForSpeech = geminiAudio;
         if (!geminiAudio) {
             const messages = [
-                'Warming up the vocal cords...',
-                'Generating high-quality audio...',
-                'This can take a moment for longer texts.',
-                'Preparing for playback...'
+                'Generating audio...',
+                'Almost ready...'
             ];
             setLoading({ active: true, message: messages});
-            audioForSpeech = await generateSpeech(data.extractedText);
+            audioForSpeech = await generateSpeech(data.extractedText, 'English');
             setGeminiAudio(audioForSpeech);
             setLoading({ active: false, message: ''});
         }

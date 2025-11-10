@@ -84,10 +84,10 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
         for (const keyword of command.keywords) {
           if (transcript.includes(keyword.toLowerCase())) {
             console.log(`Executing command for keyword: "${keyword}"`);
-            command.callback();
             if (command.feedback && feedbackEnabledRef.current) {
                 speakFeedback(command.feedback, language);
             }
+            command.callback();
             return; // Execute only the first matched command
           }
         }
