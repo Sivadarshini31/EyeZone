@@ -11,10 +11,10 @@ if (typeof pdfjsLib !== 'undefined') {
 }
 
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+const API_KEY = process.env.API_KEY;
 
 if (!API_KEY) {
-  throw new Error("GEMINI_API_KEY environment variable not set");
+  throw new Error("API_KEY environment variable not set");
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
@@ -130,7 +130,7 @@ export const describeImage = async (base64Image: string, targetLang: 'Tamil' | '
     };
     
     const textPart = {
-      text: `Describe this image in a concise but detailed way in ${targetLang} for a person with low vision. Focus on the main subjects, their actions, the setting, and any important text or colors.`,
+      text: `Briefly describe this image for a person with low vision in ${targetLang}. Focus on the main subject, setting, and any prominent actions or text. Keep the description to 2-3 sentences.`,
     };
 
     const response = await ai.models.generateContent({
@@ -145,29 +145,29 @@ export const describeImage = async (base64Image: string, targetLang: 'Tamil' | '
   }
 };
 
-export const generateSpeech = async (text: string, language: 'Tamil' | 'English' = 'English'): Promise<string> => {
+export const generateSpeech = async (text: string): Promise<string> => {
   if (!text) return '';
-  const sanitizedText = text.replace(/\s+/g, ' ').trim();
+  // Sanitize text to prevent API errors.
+  // First, remove list-style asterisks at the beginning of lines.
+  const textWithoutAsterisks = text.replace(/^\s*\*\s*/gm, '');
+  // Then, collapse all whitespace into single spaces.
+  const sanitizedText = textWithoutAsterisks.replace(/\s+/g, ' ').trim();
 
-  if (!sanitizedText) return '';
+  if (!sanitizedText) return ''; // Return if text is only whitespace
 
   try {
-    const voiceConfig = language === 'Tamil' ? 'Kore' : 'Kore';
-
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text: sanitizedText }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: voiceConfig },
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
           },
-          audioEncoding: 'LINEAR16',
         },
       },
     });
-
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     return base64Audio || '';
   } catch (error) {
@@ -190,15 +190,23 @@ export const translateText = async (text: string, targetLang: 'Tamil' | 'English
     }
 };
 
-export const getAiChatResponse = async (prompt: string): Promise<string> => {
+export const getAiChatResponse = async (prompt: string, useThinkingMode: boolean): Promise<string> => {
     if (!prompt) return 'I did not hear your question. Please try again.';
+
+    const model = useThinkingMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash-lite';
+    const config: any = {
+        systemInstruction: 'You are a helpful and friendly assistant for users with low vision. Keep your answers concise, clear, and easy to understand.',
+    };
+
+    if (useThinkingMode) {
+        config.thinkingConfig = { thinkingBudget: 32768 };
+    }
+
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model,
             contents: prompt,
-            config: {
-                systemInstruction: 'You are a helpful and friendly assistant for users with low vision. Keep your answers concise, clear, and easy to understand.',
-            },
+            config,
         });
         return response.text;
     } catch (error) {

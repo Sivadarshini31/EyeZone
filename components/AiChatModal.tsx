@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getAiChatResponse } from '../services/geminiService';
 import { Language } from '../types';
@@ -20,14 +19,10 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
   const [status, setStatus] = useState<Status>('idle');
   const [responseText, setResponseText] = useState('');
   const [userPrompt, setUserPrompt] = useState('');
+  const [thinkingMode, setThinkingMode] = useState(false);
   const recognitionRef = useRef<any>(null);
   const isComponentOpen = useRef(isOpen);
   isComponentOpen.current = isOpen;
-
-  // Use a ref to track the current status to avoid stale closures in callbacks
-  // without causing the callback itself to be recreated on every status change.
-  const statusRef = useRef(status);
-  statusRef.current = status;
 
 
   const startListening = useCallback(() => {
@@ -56,7 +51,7 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
       setUserPrompt(transcript);
       setStatus('thinking');
       
-      const aiResponse = await getAiChatResponse(transcript);
+      const aiResponse = await getAiChatResponse(transcript, thinkingMode);
       setResponseText(aiResponse);
       setStatus('speaking');
       
@@ -73,32 +68,26 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
       if (event.error === 'not-allowed') {
         setStatus('error');
         setResponseText("Microphone access was denied. Please check your browser settings to enable it for this site.");
+        recognitionRef.current?.stop();
       } else if (event.error === 'no-speech') {
-        // The 'onend' event will fire next and handle the restart gracefully.
-        console.log('No speech detected, waiting for onend handler.');
+        if (isComponentOpen.current) {
+            startListening();
+        }
       }
-      // For other errors like 'aborted', we let onend handle it.
+      // For 'aborted' errors, we now do nothing here. This prevents the restart loop.
+      // The `onend` handler will manage natural timeouts.
     };
     
     recognition.onend = () => {
-      // If recognition ends while we are still in the 'listening' state,
-      // it means there was no successful result (e.g., timeout, no-speech).
-      // We should restart listening.
-      if (isComponentOpen.current && statusRef.current === 'listening') {
-        console.log("AI chat recognition ended, restarting listening.");
-        // Use a small timeout to prevent rapid-fire restart loops on some browsers
-        // which can cause the 'aborted' error.
-        setTimeout(() => {
-          // Double check the condition in case the component was closed during the timeout
-          if (isComponentOpen.current && statusRef.current === 'listening') {
-            startListening();
-          }
-        }, 100);
+      // If recognition ends naturally (e.g., timeout) while listening, restart.
+      if (isComponentOpen.current && status === 'listening') {
+        console.log("AI chat listening timed out, restarting.");
+        startListening();
       }
     };
 
     recognition.start();
-  }, [language]); // Removed 'status' dependency to break the re-render loop
+  }, [language, status, thinkingMode]); // status and thinkingMode are needed to get latest value
   
   // This effect manages the lifecycle of the speech recognition
   useEffect(() => {
@@ -157,11 +146,32 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
       >
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-3xl font-bold">AI Assistant</h2>
-          <button onClick={handleClose} onFocus={() => speakText('Close AI Assistant', language)} aria-label="Close AI Assistant" className="p-2 rounded-full hover:bg-gray-500/20">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2" title="Use a more powerful model for complex questions, which may be slower.">
+                  <span className="font-semibold text-lg hidden sm:inline">Thinking Mode</span>
+                  <button
+                      role="switch"
+                      aria-checked={thinkingMode}
+                      aria-label={`Thinking Mode, currently ${thinkingMode ? 'on' : 'off'}`}
+                      onClick={() => setThinkingMode(!thinkingMode)}
+                      onFocus={() => speakText(`Thinking Mode. Currently ${thinkingMode ? 'on' : 'off'}.`, language)}
+                      className={`${
+                          thinkingMode ? 'bg-[var(--accent-color)]' : 'bg-gray-500/50'
+                      } relative inline-flex h-8 w-14 items-center rounded-full transition-colors`}
+                  >
+                      <span
+                          className={`${
+                              thinkingMode ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white transition-transform`}
+                      />
+                  </button>
+              </div>
+            <button onClick={handleClose} onFocus={() => speakText('Close AI Assistant', language)} aria-label="Close AI Assistant" className="p-2 rounded-full hover:bg-gray-500/20">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col items-center justify-center p-6 border-b-2 border-gray-500/20">
