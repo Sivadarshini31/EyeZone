@@ -69,19 +69,19 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
         setStatus('error');
         setResponseText("Microphone access was denied. Please check your browser settings to enable it for this site.");
         recognitionRef.current?.stop();
-      } else if (event.error === 'no-speech') {
+      } else if (event.error === 'no-speech' || event.error === 'aborted') {
+        // These errors can happen if the user is silent or due to a network blip.
+        // We'll just restart listening if the component is still open.
         if (isComponentOpen.current) {
             startListening();
         }
       }
-      // For 'aborted' errors, we now do nothing here. This prevents the restart loop.
-      // The `onend` handler will manage natural timeouts.
     };
     
     recognition.onend = () => {
-      // If recognition ends naturally (e.g., timeout) while listening, restart.
+      // If recognition ends naturally and wasn't handled by onerror, restart.
       if (isComponentOpen.current && status === 'listening') {
-        console.log("AI chat listening timed out, restarting.");
+        console.log("AI chat listening ended, restarting.");
         startListening();
       }
     };
@@ -167,7 +167,7 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
                   </button>
               </div>
             <button onClick={handleClose} onFocus={() => speakText('Close AI Assistant', language)} aria-label="Close AI Assistant" className="p-2 rounded-full hover:bg-gray-500/20">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -195,19 +195,19 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
 };
 
 const MicIcon = (props: any) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 016 0v8.25a3 3 0 01-3 3z" />
   </svg>
 );
 
 const SpeakerIcon = (props: any) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
   </svg>
 );
 
 const ErrorIcon = (props: any) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
   </svg>
 );

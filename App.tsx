@@ -75,7 +75,7 @@ const App: React.FC = () => {
         viewer_pause: { keywords: ['pause'], callback: () => setVoiceAction('pause'), feedback: 'Pausing' },
         viewer_resume: { keywords: ['resume', 'continue', 'play'], callback: () => setVoiceAction('resume'), feedback: 'Resuming' },
         viewer_stop: { keywords: ['stop'], callback: () => setVoiceAction('stop'), feedback: 'Stopping' },
-        viewer_back: { keywords: ['back', 'go back'], callback: handleBack, feedback: 'Going back' },
+        viewer_back: { keywords: ['back', 'go back', 'close'], callback: handleBack, feedback: 'Going back' },
         viewer_mag_increase: { keywords: ['increase magnification', 'zoom in'], callback: increaseMagnification, feedback: 'Zooming in' },
         viewer_mag_decrease: { keywords: ['decrease magnification', 'zoom out'], callback: decreaseMagnification, feedback: 'Zooming out' },
         viewer_rate_increase: { keywords: ['read faster', 'increase speed'], callback: increaseReadingRate, feedback: 'Increasing speed' },
@@ -111,13 +111,13 @@ const App: React.FC = () => {
         viewer_pause: { keywords: ['இடைநிறுத்தம்'], callback: () => setVoiceAction('pause'), feedback: 'இடைநிறுத்தப்படுகிறது' },
         viewer_resume: { keywords: ['தொடரவும்', 'மீண்டும் இயக்கு'], callback: () => setVoiceAction('resume'), feedback: 'மீண்டும் தொடங்குகிறது' },
         viewer_stop: { keywords: ['நிறுத்து'], callback: () => setVoiceAction('stop'), feedback: 'நிறுத்தப்படுகிறது' },
-        viewer_back: { keywords: ['பின்னால்', 'திரும்பிச் செல்'], callback: handleBack, feedback: 'பின்னால் செல்கிறது' },
+        viewer_back: { keywords: ['பின்னால்', 'திரும்பிச் செல்', 'மூடு'], callback: handleBack, feedback: 'பின்னால் செல்கிறது' },
         viewer_mag_increase: { keywords: ['உருப்பெருக்கத்தை அதிகரி', 'பெரிதாக்கு'], callback: increaseMagnification, feedback: 'பெரிதாக்குகிறது' },
         viewer_mag_decrease: { keywords: ['உருப்பெருக்கத்தைக் குறை', 'சிறிதாக்கு'], callback: decreaseMagnification, feedback: 'சிறிதாக்குகிறது' },
         viewer_rate_increase: { keywords: ['வேகமாகப் படி'], callback: increaseReadingRate, feedback: 'வேகம் அதிகரிக்கிறது' },
         viewer_rate_decrease: { keywords: ['மெதுவாகப் படி'], callback: decreaseReadingRate, feedback: 'வேகம் குறைகிறது' },
         // Settings screen
-        settings_close: { keywords: ['அமைப்புகளை மூடு', 'மூடு'], callback: () => setIsSettingsOpen(false), feedback: 'அமைப்புகள் மூடப்படுகிறது' },
+        settings_close: { keywords: ['அமைப்புகளை மூடு'], callback: () => setIsSettingsOpen(false), feedback: 'அமைப்புகள் மூடப்படுகிறது' },
         settings_voice_on: { keywords: ['குரல் கட்டளைகளை இயக்கு'], callback: () => setSpeakCommands(true), feedback: 'குரல் கட்டளைகள் இயக்கப்பட்டது' },
         settings_voice_off: { keywords: ['குரல் கட்டளைகளை முடக்கு'], callback: () => setSpeakCommands(false), feedback: '' },
         settings_feedback_on: { keywords: ['பின்னூட்டத்தை இயக்கு'], callback: () => setVoiceCommandFeedback(true), feedback: 'குரல் பின்னூட்டம் இயக்கப்பட்டது' },
@@ -177,6 +177,7 @@ const App: React.FC = () => {
         'Almost there, extracting text...',
     ];
     setLoading({ active: true, message: messages });
+    speakText('Extracting text, please wait.', appLanguage);
     try {
       const text = await extractTextFromFile(file);
       setProcessedData({ file, extractedText: text });

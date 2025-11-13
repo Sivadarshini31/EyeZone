@@ -130,7 +130,7 @@ export const describeImage = async (base64Image: string, targetLang: 'Tamil' | '
     };
     
     const textPart = {
-      text: `Briefly describe this image for a person with low vision in ${targetLang}. Focus on the main subject, setting, and any prominent actions or text. Keep the description to 2-3 sentences.`,
+      text: `Describe this image for a person with low vision in ${targetLang}. Be concise but cover the main subject, setting, and key details. One or two sentences maximum.`,
     };
 
     const response = await ai.models.generateContent({

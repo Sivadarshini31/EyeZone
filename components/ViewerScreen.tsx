@@ -22,12 +22,14 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
   const [activeText, setActiveText] = useState(data.extractedText);
   const [activeLang, setActiveLang] = useState<Language>(Language.English);
   const [geminiAudio, setGeminiAudio] = useState<string | undefined>(undefined);
+  const [geminiAudioTamil, setGeminiAudioTamil] = useState<string | undefined>(undefined);
   const [translatedTamilText, setTranslatedTamilText] = useState<string | null>(null);
   
   // State for image description feature
-  const [isDescribing, setIsDescribing] = useState(false);
   const [imageDescription, setImageDescription] = useState<string | null>(null);
   const [imageDescriptionTamil, setImageDescriptionTamil] = useState<string | null>(null);
+  const [geminiAudioDescription, setGeminiAudioDescription] = useState<string | undefined>(undefined);
+  const [geminiAudioDescriptionTamil, setGeminiAudioDescriptionTamil] = useState<string | undefined>(undefined);
   const [currentView, setCurrentView] = useState<'ocr' | 'description'>('ocr');
 
 
@@ -36,107 +38,119 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
   const handleDescribeImage = useCallback(async (lang: Language) => {
     if (data.file.type !== 'image') return;
     stop();
-    setCurrentView('description'); // Always switch to description view
+    setCurrentView('description');
 
-    // Use cache if available
     const cachedDescription = lang === Language.English ? imageDescription : imageDescriptionTamil;
+    const cachedAudio = lang === Language.English ? geminiAudioDescription : geminiAudioDescriptionTamil;
+
     if (cachedDescription) {
         setActiveText(cachedDescription);
         setActiveLang(lang);
-        speak(cachedDescription, lang);
+        // Even if description is cached, audio might not be (e.g., if previous attempt failed).
+        if (cachedAudio) {
+            speak(cachedDescription, lang, cachedAudio);
+        } else {
+            // Generate audio for the cached text.
+            setLoading({ active: true, message: 'Generating audio...' });
+            const audio = await generateSpeech(cachedDescription);
+            if (lang === Language.English) setGeminiAudioDescription(audio);
+            else setGeminiAudioDescriptionTamil(audio);
+            setLoading({ active: false, message: '' });
+            speak(cachedDescription, lang, audio);
+        }
         return;
     }
 
-    // If no cache, generate new description
-    setIsDescribing(true);
+    setLoading({ active: true, message: 'Analyzing image...' });
     setActiveText(''); 
     try {
         const description = await describeImage(data.file.content, lang === Language.English ? 'English' : 'Tamil');
-        
+        const audio = await generateSpeech(description);
+
         if (lang === Language.English) {
             setImageDescription(description);
+            setGeminiAudioDescription(audio);
         } else {
             setImageDescriptionTamil(description);
+            setGeminiAudioDescriptionTamil(audio);
         }
         
         setActiveText(description);
         setActiveLang(lang);
-        speak(description, lang);
+        speak(description, lang, audio);
     } catch (error) {
         console.error(`Image description failed for ${lang}:`, error);
         const errorMsg = "Sorry, I couldn't describe the image.";
         setActiveText(errorMsg);
-        speak(errorMsg, Language.English); // Speak error in English
+        speak(errorMsg, Language.English);
     } finally {
-        setIsDescribing(false);
+        setLoading({ active: false, message: '' });
     }
-  }, [data.file, speak, imageDescription, imageDescriptionTamil, stop]);
+  }, [data.file, speak, imageDescription, imageDescriptionTamil, geminiAudioDescription, geminiAudioDescriptionTamil, stop]);
 
   const handleRead = useCallback(async (lang: Language) => {
-    stop(); // Stop any current speech
+    stop();
 
     if (currentView === 'description') {
         handleDescribeImage(lang);
         return;
     }
 
-    if (lang === Language.Tamil) {
-        // Simple regex to check for presence of Tamil characters
-        const isAlreadyTamil = /[\u0B80-\u0BFF]/.test(data.extractedText);
+    setLoading({ active: true, message: 'Preparing text...' });
+    try {
+        let textToRead: string = '';
+        let audioForSpeech: string | undefined;
 
-        if (isAlreadyTamil) {
-            setActiveText(data.extractedText);
-            setActiveLang(Language.Tamil);
-            speak(data.extractedText, Language.Tamil);
-        } else {
-            // Text is likely not Tamil, so translate it.
-            // Use cached translation if available.
-            if (translatedTamilText) {
-                setActiveText(translatedTamilText);
-                setActiveLang(Language.Tamil);
-                speak(translatedTamilText, Language.Tamil);
-                return;
+        if (lang === Language.English) {
+            textToRead = data.extractedText;
+            audioForSpeech = geminiAudio;
+            if (!audioForSpeech && textToRead) {
+                setLoading({ active: true, message: ['Generating high-quality audio...', 'This may take a moment.'] });
+                const newAudio = await generateSpeech(textToRead);
+                setGeminiAudio(newAudio);
+                audioForSpeech = newAudio;
+            }
+        } else { // Tamil
+            const isAlreadyTamil = /[\u0B80-\u0BFF]/.test(data.extractedText);
+            let tamilText = translatedTamilText;
+            
+            if (isAlreadyTamil && !tamilText) {
+                tamilText = data.extractedText;
+                setTranslatedTamilText(tamilText); // Cache it
             }
             
-            const messages = [
-                'Contacting our translator...',
-                'Translating to Tamil...',
-                'Finalizing the translation...'
-            ];
-            setLoading({ active: true, message: messages });
-            try {
+            if (!tamilText) {
+                setLoading({ active: true, message: 'Translating to Tamil...' });
                 const newTamilText = await translateText(data.extractedText, 'Tamil');
                 setTranslatedTamilText(newTamilText);
-                setActiveText(newTamilText);
-                setActiveLang(Language.Tamil);
-                speak(newTamilText, Language.Tamil);
-            } catch (error) {
-                console.error("Translation failed:", error);
-                setActiveText("Translation to Tamil failed.");
-            } finally {
-                setLoading({ active: false, message: ''});
+                tamilText = newTamilText;
+            }
+            
+            textToRead = tamilText || '';
+            audioForSpeech = geminiAudioTamil;
+            
+            if (!audioForSpeech && textToRead) {
+                setLoading({ active: true, message: ['Generating high-quality Tamil audio...', 'This may take a moment.'] });
+                const newAudio = await generateSpeech(textToRead);
+                setGeminiAudioTamil(newAudio);
+                audioForSpeech = newAudio;
             }
         }
-    } else { // Handle English reading for OCR view
-        const textToRead = data.extractedText;
-        let audioForSpeech = geminiAudio;
-        if (!geminiAudio) {
-            const messages = [
-                'Warming up the vocal cords...',
-                'Generating high-quality audio...',
-                'This can take a moment for longer texts.',
-                'Preparing for playback...'
-            ];
-            setLoading({ active: true, message: messages});
-            audioForSpeech = await generateSpeech(data.extractedText);
-            setGeminiAudio(audioForSpeech);
-            setLoading({ active: false, message: ''});
-        }
+        
         setActiveText(textToRead);
-        setActiveLang(Language.English);
-        speak(textToRead, Language.English, audioForSpeech);
+        setActiveLang(lang);
+        if (textToRead) {
+            speak(textToRead, lang, audioForSpeech);
+        }
+    } catch (error) {
+        console.error(`Error during read process for ${lang}:`, error);
+        const errorMsg = "Sorry, an error occurred while preparing the text.";
+        setActiveText(errorMsg);
+        speak(errorMsg, Language.English);
+    } finally {
+        setLoading({ active: false, message: ''});
     }
-  }, [data.extractedText, geminiAudio, speak, stop, translatedTamilText, currentView, handleDescribeImage]);
+  }, [data.extractedText, geminiAudio, geminiAudioTamil, translatedTamilText, currentView, stop, speak, handleDescribeImage]);
 
   // Effect to handle incoming voice commands
   useEffect(() => {
@@ -177,7 +191,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
   }, [stop]);
   
   const renderHighlightedText = (text: string, highlight: HighlightInfo) => {
-    if (highlight.startIndex === -1 || highlight.endIndex === -1) {
+    if (highlight.startIndex === -1 || highlight.endIndex === -1 || !text) {
       return text;
     }
     const pre = text.substring(0, highlight.startIndex);
@@ -197,8 +211,8 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
   
   const showOcrText = () => {
       setCurrentView('ocr');
-      setActiveText(data.extractedText);
-      setActiveLang(Language.English);
+      // Show original or translated text based on last active language
+      setActiveText(activeLang === Language.Tamil && translatedTamilText ? translatedTamilText : data.extractedText);
       stop();
   };
 
@@ -270,12 +284,11 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
                 )
               )}
             </div>
-            {loading.active ? <Spinner message={loading.message} /> :
-              isDescribing ? <Spinner message="Analyzing image..." /> : (
-                  <p className="text-xl whitespace-pre-wrap">
-                      {renderHighlightedText(activeText, highlightInfo)}
-                  </p>
-              )}
+            {loading.active ? <Spinner message={loading.message} /> : (
+                <p className="text-xl whitespace-pre-wrap">
+                    {renderHighlightedText(activeText, highlightInfo)}
+                </p>
+            )}
           </div>
           <PlaybackControls
             onReadEnglish={() => handleRead(Language.English)}

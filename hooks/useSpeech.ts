@@ -19,22 +19,25 @@ export const useSpeech = (rate: ReadingRate) => {
 
   const stop = useCallback(() => {
     window.speechSynthesis.cancel();
-    if (audioSourceRef.current) {
-        // If context is suspended (i.e., paused), resume it briefly to allow stop() to work.
+    const source = audioSourceRef.current;
+    if (source) {
+        // Clear the ref first to prevent onended from firing with side-effects
+        audioSourceRef.current = null;
+        source.onended = null;
+        
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume();
         }
         try {
-            audioSourceRef.current.stop();
+            source.stop();
         } catch (e) {
             // Ignore error if source is already stopped
         }
-        audioSourceRef.current.disconnect();
-        audioSourceRef.current = null;
+        source.disconnect();
     }
     setIsPlaying(false);
     setIsPaused(false);
-    setHighlightInfo({ startIndex: -1, endIndex: -1 }); // Reset highlight
+    setHighlightInfo({ startIndex: -1, endIndex: -1 });
     utteranceRef.current = null;
   }, []);
 
@@ -47,10 +50,9 @@ export const useSpeech = (rate: ReadingRate) => {
     setIsPaused(false);
     setIsPlaying(true);
     
-    // Common setup for utterance events, which will drive highlighting for both TTS types.
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang;
-    utterance.rate = rate;
+    utteranceRef.current = utterance;
     
     utterance.onboundary = (event) => {
         const currentText = fullTextRef.current;
@@ -66,21 +68,18 @@ export const useSpeech = (rate: ReadingRate) => {
         }
     };
     
-    utterance.onend = () => {
-        // The utterance is the source of truth for when playback is complete.
-        setIsPlaying(false);
-        setIsPaused(false);
-        setHighlightInfo({ startIndex: -1, endIndex: -1 });
-        utteranceRef.current = null;
-        if (audioSourceRef.current) { // Also clean up the audio source if it exists.
-            try { audioSourceRef.current.stop(); } catch(e) {}
-            audioSourceRef.current.disconnect();
-            audioSourceRef.current = null;
-        }
-    };
-    utteranceRef.current = utterance;
+    if (geminiAudioBase64 && audioContext) {
+        // For Gemini audio, the audio has a fixed rate. We must slow down the
+        // muted utterance to ensure it provides boundary events for the entire duration.
+        // We ignore the user's preferred `rate` here as it would de-sync highlighting.
+        utterance.rate = 0.7; // A slower, consistent rate for the timing utterance.
+        utterance.volume = 0;
 
-    if (lang === Language.English && geminiAudioBase64 && audioContext) {
+        // The muted utterance's onend should NOT stop our main audio.
+        utterance.onend = () => {
+            console.log("Muted utterance for timing has finished.");
+        };
+
         if (audioContext.state === 'suspended') {
             await audioContext.resume();
         }
@@ -93,18 +92,45 @@ export const useSpeech = (rate: ReadingRate) => {
             source.buffer = audioBuffer;
             source.connect(audioContext.destination);
             
-            // The key: play high-quality audio, use silent browser TTS for events.
-            utterance.volume = 0;
+            audioSourceRef.current = source; // Set ref BEFORE attaching onended
+
+            // The AudioBufferSourceNode's onended event is the TRUE source of completion.
+            source.onended = () => {
+                // Check if the ref still points to this source. If null, stop() was called manually.
+                if (audioSourceRef.current === source) {
+                    setIsPlaying(false);
+                    setIsPaused(false);
+                    setHighlightInfo({ startIndex: -1, endIndex: -1 });
+                    utteranceRef.current = null;
+                    audioSourceRef.current = null;
+                    window.speechSynthesis.cancel(); // Also stop the muted utterance if it's still going.
+                }
+            };
+
             window.speechSynthesis.speak(utterance);
             source.start(0);
-            
-            audioSourceRef.current = source;
         } catch (error) {
             console.error("Failed to decode/play Gemini audio, falling back to browser TTS:", error);
             utterance.volume = 1; // Ensure volume is 1 for fallback
+            utterance.rate = rate; // Use user rate for fallback
+            utterance.onend = () => {
+                setIsPlaying(false);
+                setIsPaused(false);
+                setHighlightInfo({ startIndex: -1, endIndex: -1 });
+                utteranceRef.current = null;
+            };
             window.speechSynthesis.speak(utterance);
         }
-    } else { // Fallback to browser TTS for Tamil or if Gemini fails
+    } else { // Fallback to browser TTS if Gemini audio is not available
+        console.warn(`No Gemini audio provided for lang ${lang}, or audio context not available. Falling back to browser TTS.`);
+        // For browser-native TTS, the user's rate preference is applied directly.
+        utterance.rate = rate;
+        utterance.onend = () => {
+            setIsPlaying(false);
+            setIsPaused(false);
+            setHighlightInfo({ startIndex: -1, endIndex: -1 });
+            utteranceRef.current = null;
+        };
         window.speechSynthesis.speak(utterance);
     }
   }, [rate, stop]);
