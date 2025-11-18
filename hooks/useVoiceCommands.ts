@@ -14,8 +14,11 @@ const SpeechRecognition = (window as any).SpeechRecognition || (window as any).w
 const isSpeechRecognitionSupported = !!SpeechRecognition;
 
 const speakFeedback = (text: string, lang: Language) => {
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang;
+    utterance.rate = 1;
+    utterance.volume = 1;
     window.speechSynthesis.speak(utterance);
 };
 

@@ -136,32 +136,38 @@ export const useSpeech = (rate: ReadingRate) => {
   }, [rate, stop]);
 
   const pause = useCallback(async () => {
-    if (!isPlaying || isPaused) return;
+    if (isPaused || !isPlaying) return;
 
-    if (audioSourceRef.current && audioContext) {
+    try {
+      if (audioSourceRef.current && audioContext && audioContext.state === 'running') {
         await audioContext.suspend();
-    }
-    // Always pause the speech synthesis as it controls the timing
-    if (window.speechSynthesis.speaking) {
+      }
+      if (window.speechSynthesis.speaking) {
         window.speechSynthesis.pause();
+      }
+    } catch (error) {
+      console.error("Error during pause:", error);
     }
     setIsPaused(true);
     setIsPlaying(false);
   }, [isPlaying, isPaused]);
 
   const resume = useCallback(async () => {
-    if (!isPaused) return;
+    if (!isPaused || !isPlaying) return;
 
-    if (audioSourceRef.current && audioContext) {
+    try {
+      if (audioSourceRef.current && audioContext && audioContext.state === 'suspended') {
         await audioContext.resume();
-    }
-     // Always resume speech synthesis
-    if (window.speechSynthesis.paused) {
+      }
+      if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
+      }
+    } catch (error) {
+      console.error("Error during resume:", error);
     }
     setIsPaused(false);
     setIsPlaying(true);
-  }, [isPaused]);
+  }, [isPaused, isPlaying]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -52,7 +52,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
         } else {
             // Generate audio for the cached text.
             setLoading({ active: true, message: 'Generating audio...' });
-            const audio = await generateSpeech(cachedDescription);
+            const audio = await generateSpeech(cachedDescription, lang === Language.English ? 'English' : 'Tamil');
             if (lang === Language.English) setGeminiAudioDescription(audio);
             else setGeminiAudioDescriptionTamil(audio);
             setLoading({ active: false, message: '' });
@@ -65,7 +65,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
     setActiveText(''); 
     try {
         const description = await describeImage(data.file.content, lang === Language.English ? 'English' : 'Tamil');
-        const audio = await generateSpeech(description);
+        const audio = await generateSpeech(description, lang === Language.English ? 'English' : 'Tamil');
 
         if (lang === Language.English) {
             setImageDescription(description);
@@ -106,7 +106,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
             audioForSpeech = geminiAudio;
             if (!audioForSpeech && textToRead) {
                 setLoading({ active: true, message: ['Generating high-quality audio...', 'This may take a moment.'] });
-                const newAudio = await generateSpeech(textToRead);
+                const newAudio = await generateSpeech(textToRead, 'English');
                 setGeminiAudio(newAudio);
                 audioForSpeech = newAudio;
             }
@@ -131,7 +131,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
             
             if (!audioForSpeech && textToRead) {
                 setLoading({ active: true, message: ['Generating high-quality Tamil audio...', 'This may take a moment.'] });
-                const newAudio = await generateSpeech(textToRead);
+                const newAudio = await generateSpeech(textToRead, 'Tamil');
                 setGeminiAudioTamil(newAudio);
                 audioForSpeech = newAudio;
             }
@@ -156,32 +156,39 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
   useEffect(() => {
     if (!voiceAction) return;
 
-    switch (voiceAction) {
-      case 'read-english':
-        handleRead(Language.English);
-        break;
-      case 'read-tamil':
-        handleRead(Language.Tamil);
-        break;
-      case 'pause':
-        pause();
-        break;
-      case 'resume':
-        if(isPaused) resume();
-        break;
-      case 'stop':
-        stop();
-        break;
-      case 'describe-image-english':
-        handleDescribeImage(Language.English);
-        break;
-      case 'describe-image-tamil':
-        handleDescribeImage(Language.Tamil);
-        break;
-    }
-    
+    const executeAction = async () => {
+      switch (voiceAction) {
+        case 'read-english':
+          await handleRead(Language.English);
+          break;
+        case 'read-tamil':
+          await handleRead(Language.Tamil);
+          break;
+        case 'pause':
+          if (isPlaying && !isPaused) {
+            await pause();
+          }
+          break;
+        case 'resume':
+          if (isPaused) {
+            await resume();
+          }
+          break;
+        case 'stop':
+          stop();
+          break;
+        case 'describe-image-english':
+          await handleDescribeImage(Language.English);
+          break;
+        case 'describe-image-tamil':
+          await handleDescribeImage(Language.Tamil);
+          break;
+      }
+    };
+
+    executeAction();
     onVoiceActionConsumed();
-  }, [voiceAction, onVoiceActionConsumed, handleRead, pause, resume, stop, isPaused, handleDescribeImage]);
+  }, [voiceAction, onVoiceActionConsumed, handleRead, pause, resume, stop, isPaused, isPlaying, handleDescribeImage]);
 
   useEffect(() => {
       // Stop speech when component unmounts
