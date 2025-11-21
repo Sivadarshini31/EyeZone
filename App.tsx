@@ -5,6 +5,7 @@ import MainScreen from './components/MainScreen';
 import SettingsModal from './components/SettingsModal';
 import ViewerScreen from './components/ViewerScreen';
 import Spinner from './components/Spinner';
+import SetupModal from './components/SetupModal';
 import { extractTextFromFile } from './services/geminiService';
 import { useVoiceCommands } from './hooks/useVoiceCommands';
 import { speakText } from './utils/helpers';
@@ -20,13 +21,16 @@ const App: React.FC = () => {
   const [contrast, setContrast] = useState<ContrastMode>(ContrastMode.Dark);
   const [magnification, setMagnification] = useState(1);
   const [readingRate, setReadingRate] = useState<ReadingRate>(ReadingRate.Normal);
-  
+
   // Voice Command State
   const [speakCommands, setSpeakCommands] = useState(false);
   const [voiceCommandFeedback, setVoiceCommandFeedback] = useState(true);
   const [appLanguage, setAppLanguage] = useState<Language>(Language.English);
   const [voiceAction, setVoiceAction] = useState<string | null>(null);
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+
+  // Setup State
+  const [showSetup, setShowSetup] = useState(!localStorage.getItem('GEMINI_API_KEY') && !process.env.GEMINI_API_KEY);
 
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -252,6 +256,7 @@ const App: React.FC = () => {
         appLanguage={appLanguage}
         setAppLanguage={setAppLanguage}
       />
+      <SetupModal isOpen={showSetup} />
     </div>
   );
 };

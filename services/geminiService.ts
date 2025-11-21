@@ -11,15 +11,26 @@ if (typeof pdfjsLib !== 'undefined') {
 }
 
 
-const API_KEY = process.env.API_KEY;
+let API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+if (typeof window !== 'undefined' && !API_KEY) {
+  const storedKey = localStorage.getItem('GEMINI_API_KEY');
+  if (storedKey) {
+    API_KEY = storedKey;
+  }
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+let ai: any = null;
+
+if (API_KEY && API_KEY.trim()) {
+  ai = new GoogleGenAI({ apiKey: API_KEY });
+}
 
 export const extractTextFromFile = async (file: AppFile): Promise<string> => {
+  if (!ai) {
+    return "Error: API key not configured. Please set GEMINI_API_KEY in your .env file.";
+  }
+
   if (file.type === 'pdf') {
     if (typeof pdfjsLib === 'undefined') {
         console.error("pdf.js library is not loaded.");
@@ -38,7 +49,7 @@ export const extractTextFromFile = async (file: AppFile): Promise<string> => {
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            
+
             if (!textContent.items || textContent.items.length === 0) {
                 continue;
             }
@@ -55,7 +66,7 @@ export const extractTextFromFile = async (file: AppFile): Promise<string> => {
             for (let j = 1; j < items.length; j++) {
                 const prev = items[j-1];
                 const curr = items[j];
-                
+
                 // Heuristic to detect a new line: if the vertical position is significantly different,
                 // it's a new line. The threshold is half the height of the previous text item.
                 if (Math.abs(curr.transform[5] - prev.transform[5]) > prev.height * 0.5) {
@@ -105,7 +116,7 @@ export const extractTextFromFile = async (file: AppFile): Promise<string> => {
       mimeType: 'image/jpeg', // Assuming jpeg, could be dynamic
     },
   };
-  
+
   const textPart = {
     text: "Extract all text from this image. Respond in the language of the text. If no text is found, respond with 'No text found in the image.'",
   };
@@ -119,6 +130,7 @@ export const extractTextFromFile = async (file: AppFile): Promise<string> => {
 };
 
 export const describeImage = async (base64Image: string, targetLang: 'Tamil' | 'English'): Promise<string> => {
+  if (!ai) return 'Error: API key not configured. Please set GEMINI_API_KEY in your .env file.';
   if (!base64Image) return 'No image provided to describe.';
 
   try {
@@ -145,7 +157,8 @@ export const describeImage = async (base64Image: string, targetLang: 'Tamil' | '
   }
 };
 
-export const generateSpeech = async (text: string): Promise<string> => {
+export const generateSpeech = async (text: string, lang?: string): Promise<string> => {
+  if (!ai) return '';
   if (!text) return '';
   // Sanitize text to prevent API errors.
   // First, remove list-style asterisks at the beginning of lines.
@@ -177,6 +190,7 @@ export const generateSpeech = async (text: string): Promise<string> => {
 };
 
 export const translateText = async (text: string, targetLang: 'Tamil' | 'English'): Promise<string> => {
+    if (!ai) return `Translation failed. Original text: ${text}`;
     if (!text) return '';
     try {
         const response = await ai.models.generateContent({
@@ -191,6 +205,7 @@ export const translateText = async (text: string, targetLang: 'Tamil' | 'English
 };
 
 export const getAiChatResponse = async (prompt: string, useThinkingMode: boolean): Promise<string> => {
+    if (!ai) return "I'm sorry, the API is not configured. Please set GEMINI_API_KEY in your .env file.";
     if (!prompt) return 'I did not hear your question. Please try again.';
 
     const model = useThinkingMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash-lite';
