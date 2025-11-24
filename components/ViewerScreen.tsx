@@ -22,14 +22,14 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
   const [activeText, setActiveText] = useState(data.extractedText);
   const [activeLang, setActiveLang] = useState<Language>(Language.English);
   const [geminiAudio, setGeminiAudio] = useState<string | undefined>(undefined);
-  const [geminiAudioTamil, setGeminiAudioTamil] = useState<string | undefined>(undefined);
+  // We only store Tamil audio if we decide to use Gemini for it in the future, 
+  // currently we force native TTS for Tamil.
   const [translatedTamilText, setTranslatedTamilText] = useState<string | null>(null);
   
   // State for image description feature
   const [imageDescription, setImageDescription] = useState<string | null>(null);
   const [imageDescriptionTamil, setImageDescriptionTamil] = useState<string | null>(null);
   const [geminiAudioDescription, setGeminiAudioDescription] = useState<string | undefined>(undefined);
-  const [geminiAudioDescriptionTamil, setGeminiAudioDescriptionTamil] = useState<string | undefined>(undefined);
   const [currentView, setCurrentView] = useState<'ocr' | 'description'>('ocr');
 
 
@@ -41,22 +41,24 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
     setCurrentView('description');
 
     const cachedDescription = lang === Language.English ? imageDescription : imageDescriptionTamil;
-    const cachedAudio = lang === Language.English ? geminiAudioDescription : geminiAudioDescriptionTamil;
-
+    
     if (cachedDescription) {
         setActiveText(cachedDescription);
         setActiveLang(lang);
-        // Even if description is cached, audio might not be (e.g., if previous attempt failed).
-        if (cachedAudio) {
-            speak(cachedDescription, lang, cachedAudio);
+        
+        if (lang === Language.English) {
+             if (geminiAudioDescription) {
+                 speak(cachedDescription, lang, geminiAudioDescription);
+             } else {
+                 setLoading({ active: true, message: 'Generating audio...' });
+                 const audio = await generateSpeech(cachedDescription);
+                 setGeminiAudioDescription(audio);
+                 setLoading({ active: false, message: '' });
+                 speak(cachedDescription, lang, audio);
+             }
         } else {
-            // Generate audio for the cached text.
-            setLoading({ active: true, message: 'Generating audio...' });
-            const audio = await generateSpeech(cachedDescription, lang === Language.English ? 'English' : 'Tamil');
-            if (lang === Language.English) setGeminiAudioDescription(audio);
-            else setGeminiAudioDescriptionTamil(audio);
-            setLoading({ active: false, message: '' });
-            speak(cachedDescription, lang, audio);
+            // For Tamil, use native TTS
+            speak(cachedDescription, lang, undefined);
         }
         return;
     }
@@ -65,19 +67,21 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
     setActiveText(''); 
     try {
         const description = await describeImage(data.file.content, lang === Language.English ? 'English' : 'Tamil');
-        const audio = await generateSpeech(description, lang === Language.English ? 'English' : 'Tamil');
-
+        
         if (lang === Language.English) {
             setImageDescription(description);
+            const audio = await generateSpeech(description);
             setGeminiAudioDescription(audio);
+            setActiveText(description);
+            setActiveLang(lang);
+            speak(description, lang, audio);
         } else {
             setImageDescriptionTamil(description);
-            setGeminiAudioDescriptionTamil(audio);
+            // Skip Gemini audio generation for Tamil to ensure better pronunciation via native TTS
+            setActiveText(description);
+            setActiveLang(lang);
+            speak(description, lang, undefined);
         }
-        
-        setActiveText(description);
-        setActiveLang(lang);
-        speak(description, lang, audio);
     } catch (error) {
         console.error(`Image description failed for ${lang}:`, error);
         const errorMsg = "Sorry, I couldn't describe the image.";
@@ -86,7 +90,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
     } finally {
         setLoading({ active: false, message: '' });
     }
-  }, [data.file, speak, imageDescription, imageDescriptionTamil, geminiAudioDescription, geminiAudioDescriptionTamil, stop]);
+  }, [data.file, speak, imageDescription, imageDescriptionTamil, geminiAudioDescription, stop]);
 
   const handleRead = useCallback(async (lang: Language) => {
     stop();
@@ -106,7 +110,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
             audioForSpeech = geminiAudio;
             if (!audioForSpeech && textToRead) {
                 setLoading({ active: true, message: ['Generating high-quality audio...', 'This may take a moment.'] });
-                const newAudio = await generateSpeech(textToRead, 'English');
+                const newAudio = await generateSpeech(textToRead);
                 setGeminiAudio(newAudio);
                 audioForSpeech = newAudio;
             }
@@ -127,68 +131,59 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
             }
             
             textToRead = tamilText || '';
-            audioForSpeech = geminiAudioTamil;
-            
-            if (!audioForSpeech && textToRead) {
-                setLoading({ active: true, message: ['Generating high-quality Tamil audio...', 'This may take a moment.'] });
-                const newAudio = await generateSpeech(textToRead, 'Tamil');
-                setGeminiAudioTamil(newAudio);
-                audioForSpeech = newAudio;
-            }
+            // For Tamil, we force native browser TTS by passing undefined for audio.
+            // This usually provides better pronunciation for Tamil than the current Gemini preview model.
+            audioForSpeech = undefined;
         }
         
+        if (!textToRead) {
+            throw new Error("Text content is empty or translation failed.");
+        }
+
         setActiveText(textToRead);
         setActiveLang(lang);
-        if (textToRead) {
-            speak(textToRead, lang, audioForSpeech);
-        }
+        speak(textToRead, lang, audioForSpeech);
+        
     } catch (error) {
         console.error(`Error during read process for ${lang}:`, error);
-        const errorMsg = "Sorry, an error occurred while preparing the text.";
+        const errorMsg = "Sorry, I couldn't process the text for reading.";
         setActiveText(errorMsg);
         speak(errorMsg, Language.English);
     } finally {
         setLoading({ active: false, message: ''});
     }
-  }, [data.extractedText, geminiAudio, geminiAudioTamil, translatedTamilText, currentView, stop, speak, handleDescribeImage]);
+  }, [data.extractedText, geminiAudio, translatedTamilText, currentView, stop, speak, handleDescribeImage]);
 
   // Effect to handle incoming voice commands
   useEffect(() => {
     if (!voiceAction) return;
 
-    const executeAction = async () => {
-      switch (voiceAction) {
-        case 'read-english':
-          await handleRead(Language.English);
-          break;
-        case 'read-tamil':
-          await handleRead(Language.Tamil);
-          break;
-        case 'pause':
-          if (isPlaying && !isPaused) {
-            await pause();
-          }
-          break;
-        case 'resume':
-          if (isPaused) {
-            await resume();
-          }
-          break;
-        case 'stop':
-          stop();
-          break;
-        case 'describe-image-english':
-          await handleDescribeImage(Language.English);
-          break;
-        case 'describe-image-tamil':
-          await handleDescribeImage(Language.Tamil);
-          break;
-      }
-    };
-
-    executeAction();
+    switch (voiceAction) {
+      case 'read-english':
+        handleRead(Language.English);
+        break;
+      case 'read-tamil':
+        handleRead(Language.Tamil);
+        break;
+      case 'pause':
+        pause();
+        break;
+      case 'resume':
+        if(isPaused) resume();
+        break;
+      case 'stop':
+        stop();
+        break;
+      case 'describe-image-english':
+        handleDescribeImage(Language.English);
+        break;
+      case 'describe-image-tamil':
+        handleDescribeImage(Language.Tamil);
+        break;
+    }
+    
     onVoiceActionConsumed();
-  }, [voiceAction, onVoiceActionConsumed, handleRead, pause, resume, stop, isPaused, isPlaying, handleDescribeImage]);
+  }, [voiceAction, onVoiceActionConsumed, handleRead, pause, resume, stop, isPaused, handleDescribeImage]);
 
   useEffect(() => {
       // Stop speech when component unmounts

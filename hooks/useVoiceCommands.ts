@@ -1,6 +1,5 @@
 
-
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Language, Command } from '../types';
 
 interface VoiceCommandsProps {
@@ -10,15 +9,10 @@ interface VoiceCommandsProps {
   feedbackEnabled: boolean;
 }
 
-const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-const isSpeechRecognitionSupported = !!SpeechRecognition;
-
 const speakFeedback = (text: string, lang: Language) => {
-    window.speechSynthesis.cancel();
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang;
-    utterance.rate = 1;
-    utterance.volume = 1;
     window.speechSynthesis.speak(utterance);
 };
 
@@ -26,6 +20,16 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
   const [isListening, setIsListening] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const stopInProgress = useRef(false);
+
+  // Defer access to SpeechRecognition until the hook is actually used, and memoize it.
+  const SpeechRecognition = useMemo(() => {
+    if (typeof window !== 'undefined') {
+        return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    }
+    return null;
+  }, []);
+
+  const isSpeechRecognitionSupported = useMemo(() => !!SpeechRecognition, [SpeechRecognition]);
 
   const commandsRef = useRef(commands);
   commandsRef.current = commands;
@@ -61,6 +65,12 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
     };
 
     recognition.onerror = (event: any) => {
+      if (event.error === 'no-speech') {
+          // Ignore 'no-speech' error as it just means silence, which is normal.
+          // The onend handler will restart the service.
+          return;
+      }
+
       console.error('Speech recognition error:', event.error);
       if (event.error === 'not-allowed') {
         console.error("Microphone permission denied. Voice commands will be disabled.");
@@ -98,11 +108,17 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
     return () => {
       console.log('Cleaning up voice recognition.');
       stopInProgress.current = true;
-      recognition.onend = null; // Important: prevent restart on intentional stop
-      recognition.stop();
+      if (recognition) {
+        recognition.onend = null; // Important: prevent restart on intentional stop
+        try {
+            recognition.stop();
+        } catch (e) {
+            // ignore if already stopped
+        }
+      }
       setIsListening(false);
     };
-  }, [enabled, language, permissionDenied]);
+  }, [enabled, language, permissionDenied, SpeechRecognition, isSpeechRecognitionSupported]);
 
   return { isListening, isSpeechRecognitionSupported };
 };

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getAiChatResponse } from '../services/geminiService';
 import { Language } from '../types';
 import { speakText } from '../utils/helpers';
@@ -13,17 +13,28 @@ interface AiChatModalProps {
 
 type Status = 'listening' | 'thinking' | 'speaking' | 'idle' | 'error';
 
-const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
 const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) => {
   const [status, setStatus] = useState<Status>('idle');
+  // Use a ref to track status synchronously for use inside event callbacks
+  const statusRef = useRef<Status>('idle');
   const [responseText, setResponseText] = useState('');
   const [userPrompt, setUserPrompt] = useState('');
   const [thinkingMode, setThinkingMode] = useState(false);
+  const [videoId, setVideoId] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const isComponentOpen = useRef(isOpen);
   isComponentOpen.current = isOpen;
 
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const SpeechRecognition = useMemo(() => {
+      if (typeof window !== 'undefined') {
+          return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      }
+      return null;
+  }, []);
 
   const startListening = useCallback(() => {
     if (!isComponentOpen.current || !SpeechRecognition) {
@@ -33,7 +44,11 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
     if (recognitionRef.current) {
       recognitionRef.current.onend = null;
       recognitionRef.current.onerror = null;
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+          // ignore
+      }
     }
     
     const recognition = new SpeechRecognition();
@@ -45,6 +60,7 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
     setStatus('listening');
     setResponseText('');
     setUserPrompt('');
+    setVideoId(null); // Clear previous video when starting new listen session
     
     recognition.onresult = async (event: any) => {
       const transcript = event.results[0][0].transcript;
@@ -52,73 +68,126 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
       setStatus('thinking');
       
       const aiResponse = await getAiChatResponse(transcript, thinkingMode);
+      
+      // Check for YouTube links in the response
+      const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+      const match = aiResponse.match(youtubeRegex);
+      
+      let textToSpeak = aiResponse;
+      let detectedVideoId = null;
+
+      if (match && match[1]) {
+          detectedVideoId = match[1];
+          setVideoId(detectedVideoId);
+          // Remove the URL from the text to be spoken so it sounds natural
+          textToSpeak = aiResponse.replace(/https?:\/\/\S+/g, '').replace('  ', ' ');
+          if (textToSpeak.trim().length < 5) {
+              textToSpeak = "Okay, playing that for you.";
+          }
+      } else {
+          setVideoId(null);
+      }
+
       setResponseText(aiResponse);
       setStatus('speaking');
       
-      speakText(aiResponse, language, () => {
-        // After speaking, listen for the next command if modal is still open
-        if (isComponentOpen.current) {
+      speakText(textToSpeak, language, () => {
+        // After speaking, listen for the next command if modal is still open.
+        // HOWEVER, if a video is playing, do NOT restart listening automatically
+        // to prevent the microphone from picking up the song and creating a loop.
+        if (isComponentOpen.current && !detectedVideoId) {
             startListening();
         }
       });
     };
 
     recognition.onerror = (event: any) => {
+      // Ignore 'no-speech' and 'aborted'. 
+      // 'no-speech' means silence. 'aborted' can happen on stop/restart or focus change.
+      // We rely on onend to restart if we were listening.
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+         return;
+      }
+
       console.error('AI Chat recognition error:', event.error);
+      
       if (event.error === 'not-allowed') {
         setStatus('error');
         setResponseText("Microphone access was denied. Please check your browser settings to enable it for this site.");
-        recognitionRef.current?.stop();
-      } else if (event.error === 'no-speech' || event.error === 'aborted') {
-        // These errors can happen if the user is silent or due to a network blip.
-        // We'll just restart listening if the component is still open.
-        if (isComponentOpen.current) {
-            startListening();
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(e) {}
         }
       }
     };
     
     recognition.onend = () => {
-      // If recognition ends naturally and wasn't handled by onerror, restart.
-      if (isComponentOpen.current && status === 'listening') {
-        console.log("AI chat listening ended, restarting.");
+      // Use ref to check status to avoid stale closure issues
+      // Only restart if we were expecting to listen and no video is active (handled by onresult logic mainly, but safety here)
+      if (isComponentOpen.current && statusRef.current === 'listening') {
+        console.log("AI chat listening ended (likely silence), restarting.");
         startListening();
       }
     };
 
-    recognition.start();
-  }, [language, status, thinkingMode]); // status and thinkingMode are needed to get latest value
+    try {
+        recognition.start();
+    } catch (e) {
+        console.error("Error starting AI chat recognition", e);
+    }
+  }, [language, thinkingMode, SpeechRecognition]); 
   
   // This effect manages the lifecycle of the speech recognition
   useEffect(() => {
+    let timeoutId: any;
     if (isOpen) {
-      startListening();
+        // Add a small delay to allow previous speech recognition instance (from main app) to fully stop
+        timeoutId = setTimeout(() => {
+             startListening();
+        }, 300);
     } else {
       if (recognitionRef.current) {
-        recognitionRef.current.onend = null; // Prevent restart on cleanup
-        recognitionRef.current.stop();
+        recognitionRef.current.onend = null; 
+        recognitionRef.current.onerror = null;
+        try {
+            recognitionRef.current.stop();
+        } catch (e) {}
         recognitionRef.current = null;
       }
-      window.speechSynthesis.cancel();
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
       setStatus('idle');
+      setVideoId(null);
     }
 
     return () => {
+      clearTimeout(timeoutId);
       if (recognitionRef.current) {
         recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
+        recognitionRef.current.onerror = null;
+        try {
+            recognitionRef.current.stop();
+        } catch (e) {}
         recognitionRef.current = null;
       }
-      window.speechSynthesis.cancel();
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, [isOpen, startListening]);
   
   const handleClose = () => {
     if (recognitionRef.current) {
       recognitionRef.current.onend = null;
-      recognitionRef.current.stop();
+      recognitionRef.current.onerror = null;
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
     }
-    window.speechSynthesis.cancel();
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
+    setVideoId(null);
     onClose();
   };
 
@@ -167,7 +236,7 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
                   </button>
               </div>
             <button onClick={handleClose} onFocus={() => speakText('Close AI Assistant', language)} aria-label="Close AI Assistant" className="p-2 rounded-full hover:bg-gray-500/20">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -178,15 +247,39 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
             {status === 'thinking' ? (
                 <Spinner message="Thinking..." />
             ) : (
-                IconComponent && <IconComponent className="w-16 h-16 text-[var(--accent-color)] mb-3 animate-pulse" />
+                IconComponent && <IconComponent className={`w-16 h-16 text-[var(--accent-color)] mb-3 ${status === 'listening' || status === 'speaking' ? 'animate-pulse' : ''}`} />
             )}
-            <p className="text-xl font-semibold">{statusText}</p>
+            
+            {/* Listening indicator/button to manually restart if stopped due to video */}
+            {!videoId && status !== 'listening' && status !== 'thinking' && (
+                <button 
+                    onClick={startListening}
+                    className="mt-2 px-4 py-2 bg-gray-700 text-white rounded-full text-sm hover:bg-gray-600 transition-colors"
+                >
+                    Tap to Speak
+                </button>
+            )}
+
+            <p className="text-xl font-semibold mt-2">{statusText}</p>
             {userPrompt && status !== 'listening' && (
                 <p className="text-lg italic text-gray-500/80 mt-2">You said: "{userPrompt}"</p>
             )}
         </div>
 
         <div className="flex-grow overflow-y-auto p-4 mt-4">
+            {videoId ? (
+                <div className="w-full aspect-video rounded-xl overflow-hidden shadow-lg mb-4 bg-black">
+                    <iframe 
+                        width="100%" 
+                        height="100%" 
+                        src={`https://www.youtube.com/embed/${videoId}?autoplay=1`} 
+                        title="YouTube video player" 
+                        frameBorder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowFullScreen
+                    ></iframe>
+                </div>
+            ) : null}
             <p className="text-2xl whitespace-pre-wrap">{responseText}</p>
         </div>
       </div>
@@ -195,19 +288,19 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
 };
 
 const MicIcon = (props: any) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor">
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 016 0v8.25a3 3 0 01-3 3z" />
   </svg>
 );
 
 const SpeakerIcon = (props: any) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor">
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
   </svg>
 );
 
 const ErrorIcon = (props: any) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor">
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
   </svg>
 );

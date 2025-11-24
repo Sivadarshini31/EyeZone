@@ -2,29 +2,31 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { AppFile } from '../types';
 
-// Add declaration for pdfjsLib from CDN
-declare const pdfjsLib: any;
+let pdfWorkerInitialized = false;
 
-// Set worker source for pdf.js, which is loaded via CDN in index.html
-if (typeof pdfjsLib !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
-}
+// Helper to safely access the global pdfjsLib object
+const getPdfLib = () => (window as any).pdfjsLib;
 
-
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Set worker source for pdf.js, which is loaded via CDN in index.html, only when needed.
+const initializePdfWorker = () => {
+    const pdfLib = getPdfLib();
+    if (!pdfWorkerInitialized && pdfLib) {
+        pdfLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
+        pdfWorkerInitialized = true;
+    }
+};
 
 export const extractTextFromFile = async (file: AppFile): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   if (file.type === 'pdf') {
-    if (typeof pdfjsLib === 'undefined') {
+    const pdfLib = getPdfLib();
+    if (!pdfLib) {
         console.error("pdf.js library is not loaded.");
         return "Error: PDF processing library failed to load.";
     }
+    
+    initializePdfWorker(); // Ensure worker is configured before use
+
     try {
         const base64Data = file.content.split(',')[1];
         const pdfData = atob(base64Data);
@@ -33,7 +35,7 @@ export const extractTextFromFile = async (file: AppFile): Promise<string> => {
             uint8Array[i] = pdfData.charCodeAt(i);
         }
 
-        const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise;
+        const pdf = await pdfLib.getDocument({ data: uint8Array }).promise;
         let fullText = '';
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
@@ -88,7 +90,7 @@ export const extractTextFromFile = async (file: AppFile): Promise<string> => {
                 text: "Extract all text from this PDF document. Respond in the language of the text. If no text is found, respond with 'No text found in the document.'",
             };
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-2.5-flash-lite',
                 contents: { parts: [pdfPart, textPart] },
             });
             return response.text;
@@ -111,7 +113,7 @@ export const extractTextFromFile = async (file: AppFile): Promise<string> => {
   };
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-2.5-flash-lite',
     contents: { parts: [imagePart, textPart] },
   });
 
@@ -119,6 +121,7 @@ export const extractTextFromFile = async (file: AppFile): Promise<string> => {
 };
 
 export const describeImage = async (base64Image: string, targetLang: 'Tamil' | 'English'): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   if (!base64Image) return 'No image provided to describe.';
 
   try {
@@ -145,7 +148,8 @@ export const describeImage = async (base64Image: string, targetLang: 'Tamil' | '
   }
 };
 
-export const generateSpeech = async (text: string): Promise<string> => {
+export const generateSpeech = async (text: string, voiceName: string = 'Kore'): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   if (!text) return '';
   // Sanitize text to prevent API errors.
   // First, remove list-style asterisks at the beginning of lines.
@@ -163,7 +167,7 @@ export const generateSpeech = async (text: string): Promise<string> => {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
+            prebuiltVoiceConfig: { voiceName },
           },
         },
       },
@@ -177,10 +181,11 @@ export const generateSpeech = async (text: string): Promise<string> => {
 };
 
 export const translateText = async (text: string, targetLang: 'Tamil' | 'English'): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     if (!text) return '';
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash-lite',
             contents: `Translate the following text to ${targetLang}: "${text}"`,
         });
         return response.text;
@@ -191,11 +196,15 @@ export const translateText = async (text: string, targetLang: 'Tamil' | 'English
 };
 
 export const getAiChatResponse = async (prompt: string, useThinkingMode: boolean): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     if (!prompt) return 'I did not hear your question. Please try again.';
 
-    const model = useThinkingMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash-lite';
+    // Use gemini-2.5-flash as default to support tools (like googleSearch), upgrade to pro for thinking
+    const model = useThinkingMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+    
     const config: any = {
-        systemInstruction: 'You are a helpful and friendly assistant for users with low vision. Keep your answers concise, clear, and easy to understand.',
+        systemInstruction: 'You are EyeZone, a helpful and interactive AI assistant for people with low vision. You can read stories, answer questions, and assist with tasks in both English and Tamil. If the user asks to play a song, music, or video, DO NOT read the lyrics. Instead, use Google Search to find a valid YouTube link for the content and provide it in your response. Always act as a friendly, capable companion. Ensure your responses are clear.',
+        tools: [{ googleSearch: {} }]
     };
 
     if (useThinkingMode) {
@@ -208,7 +217,25 @@ export const getAiChatResponse = async (prompt: string, useThinkingMode: boolean
             contents: prompt,
             config,
         });
-        return response.text;
+
+        // Append grounding links if they exist and aren't already in the text to ensure UI can pick them up
+        let text = response.text || '';
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        if (chunks) {
+            const links = chunks
+                .map((c: any) => c.web?.uri)
+                .filter((uri: string) => uri);
+            
+            const uniqueLinks = [...new Set(links)];
+            if (uniqueLinks.length > 0) {
+                 const newLinks = uniqueLinks.filter(link => !text.includes(link));
+                 if (newLinks.length > 0) {
+                     text += `\n\n${newLinks.join('\n')}`;
+                 }
+            }
+        }
+
+        return text;
     } catch (error) {
         console.error("Error getting AI chat response:", error);
         return "I'm sorry, I encountered an error and can't answer right now.";

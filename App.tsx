@@ -93,7 +93,7 @@ const App: React.FC = () => {
         settings_rate_fast: { keywords: ['fast rate', 'fast reading'], callback: () => setReadingRate(ReadingRate.Fast), feedback: 'Reading rate set to fast' },
         // Common
         common_settings: { keywords: ['settings', 'open settings', 'application settings'], callback: () => setIsSettingsOpen(true), feedback: 'Opening settings' },
-        common_ask_ai: { keywords: ['ask ai', 'hey assistant', 'ask a question'], callback: () => setIsAiChatOpen(true), feedback: 'How can I help you?' },
+        common_ask_ai: { keywords: ['ask ai', 'hey assistant', 'ask a question', 'assistant'], callback: () => setIsAiChatOpen(true), feedback: 'How can I help you?' },
         common_contrast_light: { keywords: ['light mode', 'white mode'], callback: () => setContrast(ContrastMode.Light), feedback: 'Light mode activated' },
         common_contrast_dark: { keywords: ['dark mode', 'black mode'], callback: () => setContrast(ContrastMode.Dark), feedback: 'Dark mode activated' },
         common_contrast_yellow: { keywords: ['yellow mode'], callback: () => setContrast(ContrastMode.YellowDark), feedback: 'Yellow on black mode activated' },
@@ -129,7 +129,7 @@ const App: React.FC = () => {
         settings_rate_fast: { keywords: ['வேகமான வேகம்'], callback: () => setReadingRate(ReadingRate.Fast), feedback: 'வாசிப்பு வேகம் வேகமாக அமைக்கப்பட்டது' },
         // Common
         common_settings: { keywords: ['அமைப்புகள்', 'செட்டிங்ஸ்'], callback: () => setIsSettingsOpen(true), feedback: 'அமைப்புகள் திறக்கப்படுகிறது' },
-        common_ask_ai: { keywords: ['ai இடம் கேள்', 'உதவியாளரே கேளுங்கள்'], callback: () => setIsAiChatOpen(true), feedback: 'நான் எப்படி உதவ முடியும்?' },
+        common_ask_ai: { keywords: ['ai இடம் கேள்', 'உதவியாளரே கேளுங்கள்', 'அசிஸ்டன்ட்'], callback: () => setIsAiChatOpen(true), feedback: 'நான் எப்படி உதவ முடியும்?' },
         common_contrast_light: { keywords: ['லைட் மோட்'], callback: () => setContrast(ContrastMode.Light), feedback: 'லைட் மோட் இயக்கப்பட்டது' },
         common_contrast_dark: { keywords: ['டார்க் மோட்'], callback: () => setContrast(ContrastMode.Dark), feedback: 'டார்க் மோட் இயக்கப்பட்டது' },
         common_contrast_yellow: { keywords: ['மஞ்சள் மோட்'], callback: () => setContrast(ContrastMode.YellowDark), feedback: 'மஞ்சள் மோட் இயக்கப்பட்டது' },
@@ -210,6 +210,20 @@ const App: React.FC = () => {
               </svg>
             </div>
           )}
+          
+          {/* AI Assistant Button */}
+          <button
+            onClick={() => setIsAiChatOpen(true)}
+            onFocus={() => speakText('Open AI Assistant', appLanguage)}
+            aria-label="Open AI Assistant"
+            className="p-2 rounded-full hover:bg-gray-500/20"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-[var(--accent-color)]">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.553L16.5 21.75l-.398-1.197a3.375 3.375 0 00-2.456-2.456L12.5 17.25l1.197-.398a3.375 3.375 0 002.456-2.456L16.5 13.5l.398 1.197a3.375 3.375 0 002.456 2.456L20.5 17.25l-1.197.398a3.375 3.375 0 00-2.456 2.456z" />
+            </svg>
+          </button>
+
+          {/* Settings Button */}
           <button
             onClick={() => setIsSettingsOpen(true)}
             onFocus={() => speakText('Open settings', appLanguage)}
@@ -217,7 +231,7 @@ const App: React.FC = () => {
             className="p-2 rounded-full hover:bg-gray-500/20"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-1.007 1.11-.11.55.897.09 1.996.606 2.506.517.51.139 1.403.606 1.996.467.593 1.37.135 1.996.606.627.47.168 1.447.606 1.996.438.55.968 1.05 1.594 1.594.544.428 1.05.968 1.594 1.594.55.438 1.007.968 1.11 1.594.103.627-.356 1.11-.897 1.11-.897.09-1.996.606-2.506.606-.51-.517-1.403.139-1.996.606-.593.467-1.37.135-1.996.606-.627.47-1.447.168-1.996.606-.55.438-1.05.968-1.594 1.594s-.968 1.05-1.594 1.594c-.428.544-.968 1.05-1.594 1.594-.55.438-.968 1.007-1.594 1.11-.627.103-1.11-.356-1.11-.897-.09-.897-.606-1.996-.606-2.506.517-.51.139-1.403-.606-1.996-.467-.593-.135-1.37-.606-1.996-.47-.627-.168-1.447-.606-1.996-.438-.55-.968-1.05-1.594-1.594s-.968-1.05-1.594-1.594c-.544-.428-1.05-.968-1.594-1.594-.55-.438-1.007-.968-1.11-1.594-.103-.627.356-1.11.897-1.11.897-.09 1.996-.606 2.506-.606.51.517 1.403-.139 1.996-.606.593-.467 1.37.135 1.996.606.627.47 1.447-.168 1.996-.606.55.438 1.05.968 1.594-1.594s.968-1.05 1.594-1.594zM12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
           </button>
         </div>

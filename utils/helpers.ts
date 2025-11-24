@@ -51,7 +51,7 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-export const resizeImage = (base64Str: string, maxWidth = 1920, maxHeight = 1080): Promise<string> => {
+export const resizeImage = (base64Str: string, maxWidth = 1024, maxHeight = 1024): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
@@ -88,6 +88,10 @@ export const resizeImage = (base64Str: string, maxWidth = 1920, maxHeight = 1080
 };
 
 export const speakText = (text: string, lang: Language, onEnd?: () => void) => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    return;
+  }
+  
   // Stop any previous speech to avoid overlap from rapid focusing
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);

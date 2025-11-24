@@ -3,30 +3,68 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { decode, decodeAudioData } from '../utils/helpers';
 import { Language, ReadingRate, HighlightInfo } from '../types';
 
-let audioContext: AudioContext | null = null;
-if (typeof window !== 'undefined') {
-  audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-}
-
 export const useSpeech = (rate: ReadingRate) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo>({ startIndex: -1, endIndex: -1 });
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const fullTextRef = useRef<string>(''); // To access full text in boundary events
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Load available system voices
+  useEffect(() => {
+    const updateVoices = () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        setVoices(window.speechSynthesis.getVoices());
+      }
+    };
+    
+    updateVoices();
+    
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
+
+  // Lazily initialize AudioContext and store it in a ref, scoped to this hook instance.
+  const getAudioContext = useCallback((): AudioContext | null => {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+    // Initialize if it doesn't exist or if it was closed.
+    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        try {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        } catch (e) {
+            console.error("Could not create AudioContext:", e);
+            return null;
+        }
+    }
+    return audioContextRef.current;
+  }, []);
 
   const stop = useCallback(() => {
-    window.speechSynthesis.cancel();
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
     const source = audioSourceRef.current;
     if (source) {
         // Clear the ref first to prevent onended from firing with side-effects
         audioSourceRef.current = null;
         source.onended = null;
         
-        if (audioContext && audioContext.state === 'suspended') {
-            audioContext.resume();
+        const ctx = getAudioContext();
+        if (ctx && ctx.state === 'suspended') {
+            ctx.resume().catch(e => console.error("Error resuming AudioContext in stop:", e));
         }
         try {
             source.stop();
@@ -39,7 +77,7 @@ export const useSpeech = (rate: ReadingRate) => {
     setIsPaused(false);
     setHighlightInfo({ startIndex: -1, endIndex: -1 });
     utteranceRef.current = null;
-  }, []);
+  }, [getAudioContext]);
 
   const speak = useCallback(async (text: string, lang: Language, geminiAudioBase64?: string) => {
     if (!text) return;
@@ -68,7 +106,8 @@ export const useSpeech = (rate: ReadingRate) => {
         }
     };
     
-    if (geminiAudioBase64 && audioContext) {
+    const ctx = getAudioContext();
+    if (geminiAudioBase64 && ctx) {
         // For Gemini audio, the audio has a fixed rate. We must slow down the
         // muted utterance to ensure it provides boundary events for the entire duration.
         // We ignore the user's preferred `rate` here as it would de-sync highlighting.
@@ -80,17 +119,17 @@ export const useSpeech = (rate: ReadingRate) => {
             console.log("Muted utterance for timing has finished.");
         };
 
-        if (audioContext.state === 'suspended') {
-            await audioContext.resume();
+        if (ctx.state === 'suspended') {
+            await ctx.resume();
         }
         
         try {
             const audioData = decode(geminiAudioBase64);
-            const audioBuffer = await decodeAudioData(audioData, audioContext, 24000, 1);
+            const audioBuffer = await decodeAudioData(audioData, ctx, 24000, 1);
             
-            const source = audioContext.createBufferSource();
+            const source = ctx.createBufferSource();
             source.buffer = audioBuffer;
-            source.connect(audioContext.destination);
+            source.connect(ctx.destination);
             
             audioSourceRef.current = source; // Set ref BEFORE attaching onended
 
@@ -113,6 +152,13 @@ export const useSpeech = (rate: ReadingRate) => {
             console.error("Failed to decode/play Gemini audio, falling back to browser TTS:", error);
             utterance.volume = 1; // Ensure volume is 1 for fallback
             utterance.rate = rate; // Use user rate for fallback
+            
+            // Try fallback voice selection
+            if (voices.length > 0) {
+                const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+                if (voice) utterance.voice = voice;
+            }
+
             utterance.onend = () => {
                 setIsPlaying(false);
                 setIsPaused(false);
@@ -122,52 +168,70 @@ export const useSpeech = (rate: ReadingRate) => {
             window.speechSynthesis.speak(utterance);
         }
     } else { // Fallback to browser TTS if Gemini audio is not available
-        console.warn(`No Gemini audio provided for lang ${lang}, or audio context not available. Falling back to browser TTS.`);
+        console.log(`Using native browser TTS for lang ${lang}.`);
         // For browser-native TTS, the user's rate preference is applied directly.
         utterance.rate = rate;
+
+        // Attempt to select the best voice for the language
+        if (voices.length > 0) {
+            const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+            if (voice) {
+                console.log(`Selected voice: ${voice.name} for ${lang}`);
+                utterance.voice = voice;
+            } else {
+                console.warn(`No specific voice found for ${lang}, relying on browser default for language.`);
+                // Explicitly ensuring voice is null/undefined to let browser use default language engine
+                // Some browsers might default to English if an explicit voice isn't set, but usually lang handles it.
+                // However, if we previously set a voice on a recycled object, clearing it is safer.
+                // Since we create a 'new' utterance every time, this is safe.
+            }
+        }
+
         utterance.onend = () => {
             setIsPlaying(false);
             setIsPaused(false);
             setHighlightInfo({ startIndex: -1, endIndex: -1 });
             utteranceRef.current = null;
         };
+        
+        utterance.onerror = (e) => {
+            console.error("TTS Error:", e);
+            setIsPlaying(false);
+        };
+        
         window.speechSynthesis.speak(utterance);
     }
-  }, [rate, stop]);
+  }, [rate, stop, getAudioContext, voices]);
 
   const pause = useCallback(async () => {
-    if (isPaused || !isPlaying) return;
+    if (!isPlaying || isPaused) return;
 
-    try {
-      if (audioSourceRef.current && audioContext && audioContext.state === 'running') {
-        await audioContext.suspend();
-      }
-      if (window.speechSynthesis.speaking) {
+    const ctx = getAudioContext();
+    if (audioSourceRef.current && ctx) {
+        await ctx.suspend();
+    }
+    // Always pause the speech synthesis as it controls the timing
+    if (window.speechSynthesis.speaking) {
         window.speechSynthesis.pause();
-      }
-    } catch (error) {
-      console.error("Error during pause:", error);
     }
     setIsPaused(true);
     setIsPlaying(false);
-  }, [isPlaying, isPaused]);
+  }, [isPlaying, isPaused, getAudioContext]);
 
   const resume = useCallback(async () => {
-    if (!isPaused || !isPlaying) return;
+    if (!isPaused) return;
 
-    try {
-      if (audioSourceRef.current && audioContext && audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-      if (window.speechSynthesis.paused) {
+    const ctx = getAudioContext();
+    if (audioSourceRef.current && ctx) {
+        await ctx.resume();
+    }
+     // Always resume speech synthesis
+    if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
-      }
-    } catch (error) {
-      console.error("Error during resume:", error);
     }
     setIsPaused(false);
     setIsPlaying(true);
-  }, [isPaused, isPlaying]);
+  }, [isPaused, getAudioContext]);
 
   // Cleanup on unmount
   useEffect(() => {
