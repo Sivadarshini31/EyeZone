@@ -39,14 +39,14 @@ jobs:
       - name: Prepare Cordova www
         run: npm run cordova:prepare
 
-      - name: Create release build (unsigned APK for GitHub Actions)
+      - name: Create release build (debug APK)
         run: |
           cd "cd MyApp"
-          cordova build android --release --unsigned
+          cordova build android --debug
 
       - name: Find and rename APK
         run: |
-          APK_PATH="cd MyApp/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          APK_PATH="cd MyApp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
             VERSION=$(echo ${{ github.ref }} | sed 's|refs/tags/v||')
             cp "$APK_PATH" "EyeZone-v${VERSION}.apk"
