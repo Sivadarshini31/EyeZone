@@ -87,17 +87,58 @@ export const resizeImage = (base64Str: string, maxWidth = 1024, maxHeight = 1024
   });
 };
 
+// Global array to store active utterances to prevent garbage collection on mobile browsers
+const activeUtterances: SpeechSynthesisUtterance[] = [];
+
 export const speakText = (text: string, lang: Language, onEnd?: () => void) => {
   if (typeof window === 'undefined' || !window.speechSynthesis) {
     return;
   }
   
-  // Stop any previous speech to avoid overlap from rapid focusing
+  // Stop any previous speech to avoid overlap
   window.speechSynthesis.cancel();
+  
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = lang;
-  if (onEnd) {
-    utterance.onend = onEnd;
+  
+  // Mobile browsers often need explicit voice selection to work reliably
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) {
+      let voice = voices.find(v => v.lang === lang);
+      if (!voice && lang === Language.Tamil) {
+          // Fallback search for Tamil by name or strict code
+          voice = voices.find(v => v.lang.includes('ta') || v.name.toLowerCase().includes('tamil'));
+      }
+      if (!voice) {
+          // Fallback to language code prefix (e.g., 'en' for 'en-US')
+          const shortLang = lang.split('-')[0];
+          voice = voices.find(v => v.lang.startsWith(shortLang));
+      }
+      
+      if (voice) {
+          utterance.voice = voice;
+      }
   }
+
+  utterance.onend = () => {
+    if (onEnd) onEnd();
+    // Remove from active array to allow GC
+    const index = activeUtterances.indexOf(utterance);
+    if (index > -1) {
+        activeUtterances.splice(index, 1);
+    }
+  };
+
+  utterance.onerror = (e) => {
+      console.error("Speech synthesis error:", e);
+      const index = activeUtterances.indexOf(utterance);
+      if (index > -1) {
+          activeUtterances.splice(index, 1);
+      }
+  };
+
+  // Add to global array to prevent GC
+  activeUtterances.push(utterance);
+  
   window.speechSynthesis.speak(utterance);
 };

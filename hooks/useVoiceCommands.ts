@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Language, Command } from '../types';
+import { speakText } from '../utils/helpers';
 
 interface VoiceCommandsProps {
   commands: Command[];
@@ -8,13 +9,6 @@ interface VoiceCommandsProps {
   language: Language;
   feedbackEnabled: boolean;
 }
-
-const speakFeedback = (text: string, lang: Language) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    window.speechSynthesis.speak(utterance);
-};
 
 export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled }: VoiceCommandsProps) => {
   const [isListening, setIsListening] = useState(false);
@@ -91,7 +85,7 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
             console.log(`Executing command for keyword: "${keyword}"`);
             command.callback();
             if (command.feedback && feedbackEnabledRef.current) {
-                speakFeedback(command.feedback, language);
+                speakText(command.feedback, language);
             }
             return; // Execute only the first matched command
           }
