@@ -6,29 +6,58 @@
 
 An AI-powered mobile application that helps people with low vision through image description, text extraction, and voice interaction.
 
-## 🚀 Get the APK (Easiest Way)
+## 🚀 Get the APK (Local Build – Recommended)
 
-**To build and auto-release an APK:**
+**Build the APK on your machine in 3 steps:**
 
-1. Make your changes and commit:
-   ```bash
-   git add .
-   git commit -m "Ready for release"
-   ```
+### Step 1: Clone the repo
+```bash
+git clone https://github.com/Sivadarshini31/EyeZone.git
+cd EyeZone
+npm install
+```
 
-2. Push a version tag:
-   ```bash
-   git tag -a v1.0.0 -m "Release v1.0.0"
-   git push origin v1.0.0
-   ```
+### Step 2: Set up Android environment
+Ensure you have Android SDK and Java installed. Set these environment variables:
 
-3. **Download your APK:**
-   - Go to: https://github.com/Sivadarshini31/EyeZone/releases
-   - Find your tag (e.g., `v1.0.0`)
-   - Download `EyeZone-v1.0.0.apk`
-   - Install on any Android device
+**Linux/macOS:**
+```bash
+export ANDROID_HOME="$HOME/Library/Android/sdk"  # macOS
+export ANDROID_HOME="$HOME/Android/Sdk"           # Linux
+export JAVA_HOME=$(/usr/libexec/java_home)        # macOS
+export PATH="$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$PATH"
+```
 
-GitHub Actions will automatically build the APK and attach it to your release. No additional setup needed!
+**Windows (Command Prompt):**
+```cmd
+set ANDROID_HOME=C:\Users\<YourUsername>\AppData\Local\Android\sdk
+set JAVA_HOME=C:\Program Files\Java\jdk-22
+set PATH=%ANDROID_HOME%\tools;%ANDROID_HOME%\tools\bin;%ANDROID_HOME%\platform-tools;%PATH%
+```
+
+### Step 3: Build and get your APK
+```bash
+npm run package
+npm run cordova:build:debug
+```
+
+Your APK is ready at:
+```
+cd MyApp/platforms/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+**Install on your device:**
+```bash
+adb install cd\ MyApp/platforms/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
+### GitHub Auto-Release (Advanced)
+
+Alternatively, if you want GitHub Actions to auto-build:
+1. Push a tag: `git tag -a v1.0.0 -m "Release" && git push origin v1.0.0`
+2. Download from: https://github.com/Sivadarshini31/EyeZone/releases
 
 ---
 
