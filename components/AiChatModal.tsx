@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getAiChatResponse } from '../services/geminiService';
 import { Language } from '../types';
 import { speakText } from '../utils/helpers';
 import Spinner from './Spinner';
+import { translations } from '../utils/translations';
 
 interface AiChatModalProps {
   isOpen: boolean;
@@ -24,6 +24,8 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
   const recognitionRef = useRef<any>(null);
   const isComponentOpen = useRef(isOpen);
   isComponentOpen.current = isOpen;
+  
+  const t = translations[language];
 
   useEffect(() => {
     statusRef.current = status;
@@ -91,7 +93,12 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
       setResponseText(aiResponse);
       setStatus('speaking');
       
-      speakText(textToSpeak, language, () => {
+      // Determine language of response for TTS
+      // Simple heuristic: if the app is in Tamil mode OR the response contains Tamil characters, use Tamil TTS
+      const isTamilResponse = /[\u0B80-\u0BFF]/.test(aiResponse) || language === Language.Tamil;
+      const ttsLang = isTamilResponse ? Language.Tamil : Language.English;
+      
+      speakText(textToSpeak, ttsLang, () => {
         // After speaking, listen for the next command if modal is still open.
         // HOWEVER, if a video is playing, do NOT restart listening automatically
         // to prevent the microphone from picking up the song and creating a loop.
@@ -113,7 +120,7 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
       
       if (event.error === 'not-allowed') {
         setStatus('error');
-        setResponseText("Microphone access was denied. Please check your browser settings to enable it for this site.");
+        setResponseText(t.microphoneDenied);
         if (recognitionRef.current) {
             try { recognitionRef.current.stop(); } catch(e) {}
         }
@@ -134,7 +141,7 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
     } catch (e) {
         console.error("Error starting AI chat recognition", e);
     }
-  }, [language, thinkingMode, SpeechRecognition]); 
+  }, [language, thinkingMode, SpeechRecognition, t]); 
   
   // This effect manages the lifecycle of the speech recognition
   useEffect(() => {
@@ -193,13 +200,13 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
 
   const getStatusInfo = () => {
     switch (status) {
-      case 'listening': return { icon: MicIcon, text: "Listening..." };
-      case 'thinking': return { icon: null, text: "Thinking..." };
-      case 'speaking': return { icon: SpeakerIcon, text: "AI Assistant:" };
-      case 'error': return { icon: ErrorIcon, text: "An error occurred." };
+      case 'listening': return { icon: MicIcon, text: t.listening };
+      case 'thinking': return { icon: null, text: t.thinking };
+      case 'speaking': return { icon: SpeakerIcon, text: `${t.aiAssistant}:` };
+      case 'error': return { icon: ErrorIcon, text: t.error };
       case 'idle':
       default:
-        return { icon: MicIcon, text: "AI assistant is starting..." };
+        return { icon: MicIcon, text: t.aiStarting };
     }
   };
 
@@ -214,16 +221,16 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-3xl font-bold">AI Assistant</h2>
+          <h2 className="text-3xl font-bold">{t.aiAssistant}</h2>
           <div className="flex items-center gap-4">
               <div className="flex items-center gap-2" title="Use a more powerful model for complex questions, which may be slower.">
-                  <span className="font-semibold text-lg hidden sm:inline">Thinking Mode</span>
+                  <span className="font-semibold text-lg hidden sm:inline">{t.thinkingMode}</span>
                   <button
                       role="switch"
                       aria-checked={thinkingMode}
-                      aria-label={`Thinking Mode, currently ${thinkingMode ? 'on' : 'off'}`}
+                      aria-label={`${t.thinkingMode}, ${thinkingMode ? t.on : t.off}`}
                       onClick={() => setThinkingMode(!thinkingMode)}
-                      onFocus={() => speakText(`Thinking Mode. Currently ${thinkingMode ? 'on' : 'off'}.`, language)}
+                      onFocus={() => speakText(`${t.thinkingMode}. ${thinkingMode ? t.on : t.off}.`, language)}
                       className={`${
                           thinkingMode ? 'bg-[var(--accent-color)]' : 'bg-gray-500/50'
                       } relative inline-flex h-8 w-14 items-center rounded-full transition-colors`}
@@ -235,7 +242,7 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
                       />
                   </button>
               </div>
-            <button onClick={handleClose} onFocus={() => speakText('Close AI Assistant', language)} aria-label="Close AI Assistant" className="p-2 rounded-full hover:bg-gray-500/20">
+            <button onClick={handleClose} onFocus={() => speakText(t.closeAi, language)} aria-label={t.closeAi} className="p-2 rounded-full hover:bg-gray-500/20">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -245,7 +252,7 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
 
         <div className="flex flex-col items-center justify-center p-6 border-b-2 border-gray-500/20">
             {status === 'thinking' ? (
-                <Spinner message="Thinking..." />
+                <Spinner message={t.thinking} />
             ) : (
                 IconComponent && <IconComponent className={`w-16 h-16 text-[var(--accent-color)] mb-3 ${status === 'listening' || status === 'speaking' ? 'animate-pulse' : ''}`} />
             )}
@@ -256,13 +263,13 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
                     onClick={startListening}
                     className="mt-2 px-4 py-2 bg-gray-700 text-white rounded-full text-sm hover:bg-gray-600 transition-colors"
                 >
-                    Tap to Speak
+                    {t.tapToSpeak}
                 </button>
             )}
 
             <p className="text-xl font-semibold mt-2">{statusText}</p>
             {userPrompt && status !== 'listening' && (
-                <p className="text-lg italic text-gray-500/80 mt-2">You said: "{userPrompt}"</p>
+                <p className="text-lg italic text-gray-500/80 mt-2">{t.youSaid}: "{userPrompt}"</p>
             )}
         </div>
 

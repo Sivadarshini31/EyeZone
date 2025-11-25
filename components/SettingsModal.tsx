@@ -2,6 +2,7 @@
 import React from 'react';
 import { ContrastMode, Language, ReadingRate } from '../types';
 import { speakText } from '../utils/helpers';
+import { translations } from '../utils/translations';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -25,11 +26,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const t = translations[appLanguage];
+
   const contrastOptions = [
-    { id: ContrastMode.Light, label: 'Light', classes: 'bg-white text-black' },
-    { id: ContrastMode.Dark, label: 'Dark', classes: 'bg-black text-white' },
-    { id: ContrastMode.YellowDark, label: 'Yellow', classes: 'bg-black text-yellow-400' },
-    { id: ContrastMode.BlueDark, label: 'Blue', classes: 'bg-black text-blue-300' },
+    { id: ContrastMode.Light, label: t.light, classes: 'bg-white text-black' },
+    { id: ContrastMode.Dark, label: t.dark, classes: 'bg-black text-white' },
+    { id: ContrastMode.YellowDark, label: t.yellow, classes: 'bg-black text-yellow-400' },
+    { id: ContrastMode.BlueDark, label: t.blue, classes: 'bg-black text-blue-300' },
   ];
 
   const readingRateOptions = [
@@ -60,8 +63,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold">Settings</h2>
-          <button onClick={onClose} onFocus={() => speakText('Close settings', appLanguage)} aria-label="Close settings" className="p-2 rounded-full hover:bg-gray-500/20">
+          <h2 className="text-3xl font-bold">{t.settingsTitle}</h2>
+          <button onClick={onClose} onFocus={() => speakText(t.closeSettings, appLanguage)} aria-label={t.closeSettings} className="p-2 rounded-full hover:bg-gray-500/20">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -70,7 +73,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Language Setting */}
         <div className="mb-6">
-          <h3 className="text-xl font-semibold mb-3">App Language</h3>
+          <h3 className="text-xl font-semibold mb-3">{t.appLanguage}</h3>
           <div className="flex justify-around bg-gray-500/20 rounded-lg p-1">
             {appLanguageOptions.map(option => (
               <button key={option.id} onClick={() => setAppLanguage(option.id)} onFocus={() => speakText(`Set language to ${option.label}`, appLanguage)} className={`px-4 py-2 rounded-md font-semibold text-lg flex-1 transition-colors ${appLanguage === option.id ? 'bg-[var(--accent-color)] text-white' : ''}`}>
@@ -83,12 +86,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Voice Command Setting */}
         <div className="mb-6">
           <div className="flex justify-between items-center">
-            <h3 className="text-xl font-semibold">Voice Commands</h3>
+            <h3 className="text-xl font-semibold">{t.voiceCommands}</h3>
             <button
               role="switch"
               aria-checked={speakCommands}
               onClick={handleVoiceCommandToggle}
-              onFocus={() => speakText(`Voice Commands. Currently ${speakCommands ? 'on' : 'off'}.`, appLanguage)}
+              onFocus={() => speakText(`${t.voiceCommands}. ${speakCommands ? t.on : t.off}.`, appLanguage)}
               className={`${
                 speakCommands ? 'bg-[var(--accent-color)]' : 'bg-gray-500/50'
               } relative inline-flex h-8 w-14 items-center rounded-full transition-colors`}
@@ -105,12 +108,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Voice Command Feedback Setting */}
         <div className={`mb-6 pl-6 transition-opacity ${!speakCommands ? 'opacity-50' : 'opacity-100'}`}>
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Command Feedback</h3>
+            <h3 className="text-lg font-semibold">{t.commandFeedback}</h3>
             <button
               role="switch"
               aria-checked={voiceCommandFeedback}
               onClick={() => setVoiceCommandFeedback(!voiceCommandFeedback)}
-              onFocus={() => speakText(`Command Feedback. Currently ${voiceCommandFeedback ? 'on' : 'off'}.`, appLanguage)}
+              onFocus={() => speakText(`${t.commandFeedback}. ${voiceCommandFeedback ? t.on : t.off}.`, appLanguage)}
               disabled={!speakCommands}
               className={`${
                 voiceCommandFeedback ? 'bg-[var(--accent-color)]' : 'bg-gray-500/50'
@@ -127,10 +130,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         
         {/* Contrast Setting */}
         <div className="mb-6">
-          <h3 className="text-xl font-semibold mb-3">Contrast Mode</h3>
+          <h3 className="text-xl font-semibold mb-3">{t.contrastMode}</h3>
           <div className="grid grid-cols-2 gap-3">
             {contrastOptions.map(option => (
-              <button key={option.id} onClick={() => setContrast(option.id)} onFocus={() => speakText(`Set contrast to ${option.label} mode`, appLanguage)} className={`p-3 rounded-lg text-center font-semibold border-2 ${option.classes} ${contrast === option.id ? 'border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]' : 'border-gray-500/50'}`}>
+              <button key={option.id} onClick={() => setContrast(option.id)} onFocus={() => speakText(`${t.contrastMode}: ${option.label}`, appLanguage)} className={`p-3 rounded-lg text-center font-semibold border-2 ${option.classes} ${contrast === option.id ? 'border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]' : 'border-gray-500/50'}`}>
                 {option.label}
               </button>
             ))}
@@ -139,7 +142,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Magnification Setting */}
         <div className="mb-6">
-          <h3 className="text-xl font-semibold mb-3">Magnification</h3>
+          <h3 className="text-xl font-semibold mb-3">{t.magnification}</h3>
           <div className="flex items-center space-x-4">
             <span className="text-lg">1x</span>
             <input 
@@ -149,7 +152,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               step="0.1" 
               value={magnification}
               onChange={(e) => setMagnification(Number(e.target.value))}
-              onFocus={() => speakText(`Magnification. Current level ${magnification.toFixed(1)}x.`, appLanguage)}
+              onFocus={() => speakText(`${t.magnification}. ${magnification.toFixed(1)}x.`, appLanguage)}
               className="w-full h-3 bg-gray-500/30 rounded-lg appearance-none cursor-pointer accent-[var(--accent-color)]"
             />
             <span className="text-lg">3x</span>
@@ -158,10 +161,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Reading Rate Setting */}
         <div className="mb-6">
-          <h3 className="text-xl font-semibold mb-3">Reading Rate</h3>
+          <h3 className="text-xl font-semibold mb-3">{t.readingRate}</h3>
           <div className="flex justify-around bg-gray-500/20 rounded-lg p-1">
             {readingRateOptions.map(option => (
-              <button key={option.id} onClick={() => setReadingRate(option.id)} onFocus={() => speakText(`Set reading rate to ${option.label}`, appLanguage)} className={`px-4 py-2 rounded-md font-semibold text-lg flex-1 transition-colors ${readingRate === option.id ? 'bg-[var(--accent-color)] text-white' : ''}`}>
+              <button key={option.id} onClick={() => setReadingRate(option.id)} onFocus={() => speakText(`${t.readingRate}: ${option.label}`, appLanguage)} className={`px-4 py-2 rounded-md font-semibold text-lg flex-1 transition-colors ${readingRate === option.id ? 'bg-[var(--accent-color)] text-white' : ''}`}>
                 {option.label}
               </button>
             ))}

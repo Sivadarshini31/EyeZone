@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import { AppFile } from '../types';
 
@@ -200,10 +199,10 @@ export const getAiChatResponse = async (prompt: string, useThinkingMode: boolean
     if (!prompt) return 'I did not hear your question. Please try again.';
 
     // Use gemini-2.5-flash as default to support tools (like googleSearch), upgrade to pro for thinking
-    const model = useThinkingMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+    const model = useThinkingMode ? 'gemini-3-pro-preview' : 'gemini-2.5-flash';
     
     const config: any = {
-        systemInstruction: 'You are EyeZone, a helpful and interactive AI assistant for people with low vision. You can read stories, answer questions, and assist with tasks in both English and Tamil. If the user asks to play a song, music, or video, DO NOT read the lyrics. Instead, use Google Search to find a valid YouTube link for the content and provide it in your response. Always act as a friendly, capable companion. Ensure your responses are clear.',
+        systemInstruction: 'You are EyeZone, a helpful and interactive AI assistant for people with low vision. You can read stories, answer questions, and assist with tasks in both English and Tamil. If the user asks to play a song, music, or video, DO NOT read the lyrics. Instead, use Google Search to find a valid YouTube link for the content and provide it in your response. Always act as a friendly, capable companion. Ensure your responses are clear. IMPORTANT: If the user speaks to you in Tamil, you MUST respond in Tamil. If the user speaks in English, respond in English.',
         tools: [{ googleSearch: {} }]
     };
 

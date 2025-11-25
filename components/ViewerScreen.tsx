@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { ProcessedData, Language, ReadingRate, HighlightInfo } from '../types';
 import { generateSpeech, translateText, describeImage } from '../services/geminiService';
 import { useSpeech } from '../hooks/useSpeech';
 import Spinner from './Spinner';
 import PlaybackControls from './PlaybackControls';
+import { translations } from '../utils/translations';
 
 interface ViewerScreenProps {
   data: ProcessedData;
@@ -15,25 +15,28 @@ interface ViewerScreenProps {
   onVoiceActionConsumed: () => void;
   increaseMagnification: () => void;
   decreaseMagnification: () => void;
+  appLanguage: Language;
 }
 
-const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification, readingRate, voiceAction, onVoiceActionConsumed, increaseMagnification, decreaseMagnification }) => {
+const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification, readingRate, voiceAction, onVoiceActionConsumed, increaseMagnification, decreaseMagnification, appLanguage }) => {
   const [loading, setLoading] = useState<{ active: boolean; message: string | string[] }>({ active: false, message: '' });
   const [activeText, setActiveText] = useState(data.extractedText);
   const [activeLang, setActiveLang] = useState<Language>(Language.English);
   const [geminiAudio, setGeminiAudio] = useState<string | undefined>(undefined);
-  // We only store Tamil audio if we decide to use Gemini for it in the future, 
-  // currently we force native TTS for Tamil.
+  // Cache for Tamil audio specifically
+  const [geminiAudioTamil, setGeminiAudioTamil] = useState<string | undefined>(undefined);
+  
   const [translatedTamilText, setTranslatedTamilText] = useState<string | null>(null);
   
   // State for image description feature
   const [imageDescription, setImageDescription] = useState<string | null>(null);
   const [imageDescriptionTamil, setImageDescriptionTamil] = useState<string | null>(null);
   const [geminiAudioDescription, setGeminiAudioDescription] = useState<string | undefined>(undefined);
+  const [geminiAudioDescriptionTamil, setGeminiAudioDescriptionTamil] = useState<string | undefined>(undefined);
   const [currentView, setCurrentView] = useState<'ocr' | 'description'>('ocr');
 
-
   const { speak, pause, resume, stop, isPlaying, isPaused, highlightInfo } = useSpeech(readingRate);
+  const t = translations[appLanguage];
 
   const handleDescribeImage = useCallback(async (lang: Language) => {
     if (data.file.type !== 'image') return;
@@ -41,56 +44,60 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
     setCurrentView('description');
 
     const cachedDescription = lang === Language.English ? imageDescription : imageDescriptionTamil;
+    const cachedAudio = lang === Language.English ? geminiAudioDescription : geminiAudioDescriptionTamil;
     
     if (cachedDescription) {
         setActiveText(cachedDescription);
         setActiveLang(lang);
         
-        if (lang === Language.English) {
-             if (geminiAudioDescription) {
-                 speak(cachedDescription, lang, geminiAudioDescription);
-             } else {
-                 setLoading({ active: true, message: 'Generating audio...' });
-                 const audio = await generateSpeech(cachedDescription);
-                 setGeminiAudioDescription(audio);
-                 setLoading({ active: false, message: '' });
-                 speak(cachedDescription, lang, audio);
-             }
+        if (cachedAudio) {
+             speak(cachedDescription, lang, cachedAudio);
         } else {
-            // For Tamil, use native TTS
-            speak(cachedDescription, lang, undefined);
+             setLoading({ active: true, message: t.generatingAudio });
+             const audio = await generateSpeech(cachedDescription);
+             if (lang === Language.English) setGeminiAudioDescription(audio);
+             else setGeminiAudioDescriptionTamil(audio);
+             
+             setLoading({ active: false, message: '' });
+             speak(cachedDescription, lang, audio);
         }
         return;
     }
 
-    setLoading({ active: true, message: 'Analyzing image...' });
+    setLoading({ active: true, message: t.analyzingImage });
     setActiveText(''); 
     try {
         const description = await describeImage(data.file.content, lang === Language.English ? 'English' : 'Tamil');
         
         if (lang === Language.English) {
             setImageDescription(description);
-            const audio = await generateSpeech(description);
-            setGeminiAudioDescription(audio);
-            setActiveText(description);
-            setActiveLang(lang);
-            speak(description, lang, audio);
         } else {
             setImageDescriptionTamil(description);
-            // Skip Gemini audio generation for Tamil to ensure better pronunciation via native TTS
-            setActiveText(description);
-            setActiveLang(lang);
-            speak(description, lang, undefined);
         }
+        
+        // Generate audio immediately for better experience
+        setLoading({ active: true, message: t.generatingAudio });
+        const audio = await generateSpeech(description);
+        
+        if (lang === Language.English) {
+            setGeminiAudioDescription(audio);
+        } else {
+            setGeminiAudioDescriptionTamil(audio);
+        }
+
+        setActiveText(description);
+        setActiveLang(lang);
+        speak(description, lang, audio);
+
     } catch (error) {
         console.error(`Image description failed for ${lang}:`, error);
-        const errorMsg = "Sorry, I couldn't describe the image.";
+        const errorMsg = t.errorDescribing;
         setActiveText(errorMsg);
         speak(errorMsg, Language.English);
     } finally {
         setLoading({ active: false, message: '' });
     }
-  }, [data.file, speak, imageDescription, imageDescriptionTamil, geminiAudioDescription, stop]);
+  }, [data.file, speak, imageDescription, imageDescriptionTamil, geminiAudioDescription, geminiAudioDescriptionTamil, stop, t]);
 
   const handleRead = useCallback(async (lang: Language) => {
     stop();
@@ -100,7 +107,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
         return;
     }
 
-    setLoading({ active: true, message: 'Preparing text...' });
+    setLoading({ active: true, message: t.preparingText });
     try {
         let textToRead: string = '';
         let audioForSpeech: string | undefined;
@@ -109,7 +116,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
             textToRead = data.extractedText;
             audioForSpeech = geminiAudio;
             if (!audioForSpeech && textToRead) {
-                setLoading({ active: true, message: ['Generating high-quality audio...', 'This may take a moment.'] });
+                setLoading({ active: true, message: [t.generatingAudio, t.takingMoment] });
                 const newAudio = await generateSpeech(textToRead);
                 setGeminiAudio(newAudio);
                 audioForSpeech = newAudio;
@@ -124,16 +131,22 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
             }
             
             if (!tamilText) {
-                setLoading({ active: true, message: 'Translating to Tamil...' });
+                setLoading({ active: true, message: t.translating });
                 const newTamilText = await translateText(data.extractedText, 'Tamil');
                 setTranslatedTamilText(newTamilText);
                 tamilText = newTamilText;
             }
             
             textToRead = tamilText || '';
-            // For Tamil, we force native browser TTS by passing undefined for audio.
-            // This usually provides better pronunciation for Tamil than the current Gemini preview model.
-            audioForSpeech = undefined;
+            
+            // Generate high-quality Tamil audio via Gemini TTS
+            audioForSpeech = geminiAudioTamil;
+            if (!audioForSpeech && textToRead) {
+                 setLoading({ active: true, message: [t.generatingAudio, t.takingMoment] });
+                 const newAudio = await generateSpeech(textToRead);
+                 setGeminiAudioTamil(newAudio);
+                 audioForSpeech = newAudio;
+            }
         }
         
         if (!textToRead) {
@@ -146,13 +159,13 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
         
     } catch (error) {
         console.error(`Error during read process for ${lang}:`, error);
-        const errorMsg = "Sorry, I couldn't process the text for reading.";
+        const errorMsg = t.errorReading;
         setActiveText(errorMsg);
         speak(errorMsg, Language.English);
     } finally {
         setLoading({ active: false, message: ''});
     }
-  }, [data.extractedText, geminiAudio, translatedTamilText, currentView, stop, speak, handleDescribeImage]);
+  }, [data.extractedText, geminiAudio, geminiAudioTamil, translatedTamilText, currentView, stop, speak, handleDescribeImage, t]);
 
   // Effect to handle incoming voice commands
   useEffect(() => {
@@ -224,7 +237,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
         </svg>
-        Back
+        {t.back}
       </button>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-hidden">
@@ -268,20 +281,20 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-2xl font-bold">
                 {currentView === 'ocr'
-                  ? (activeLang === Language.English ? 'Extracted Text' : 'மொழிபெயர்க்கப்பட்ட உரை')
-                  : (activeLang === Language.English ? 'Image Description' : 'பட விளக்கம்')
+                  ? (activeLang === Language.English ? t.extractedText : t.translatedText)
+                  : (activeLang === Language.English ? t.imageDescription : t.imageDescription)
                 }
               </h3>
               {data.file.type === 'image' && (
                 currentView === 'ocr' ? (
                   <button onClick={() => handleDescribeImage(Language.English)} className="px-3 py-2 bg-purple-600 text-white font-semibold rounded-lg text-base shadow-md hover:bg-purple-700 transition-colors flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.553L16.5 21.75l-.398-1.197a3.375 3.375 0 00-2.456-2.456L12.5 17.25l1.197-.398a3.375 3.375 0 002.456-2.456L16.5 13.5l.398 1.197a3.375 3.375 0 002.456 2.456L20.5 17.25l-1.197.398a3.375 3.375 0 00-2.456 2.456z" /></svg>
-                    Describe Image
+                    {t.describeImage}
                   </button>
                 ) : (
                   <button onClick={showOcrText} className="px-3 py-2 bg-gray-600 text-white font-semibold rounded-lg text-base shadow-md hover:bg-gray-700 transition-colors flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
-                    Show Extracted Text
+                    {t.showText}
                   </button>
                 )
               )}
@@ -301,6 +314,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ data, onBack, magnification
             isPlaying={isPlaying}
             isPaused={isPaused}
             isDescriptionActive={currentView === 'description'}
+            language={appLanguage}
           />
         </div>
       </div>

@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { decode, decodeAudioData } from '../utils/helpers';
 import { Language, ReadingRate, HighlightInfo } from '../types';
@@ -96,11 +95,20 @@ export const useSpeech = (rate: ReadingRate) => {
         const currentText = fullTextRef.current;
         if (event.name === 'word') {
             const startIndex = event.charIndex;
-            let endIndex = currentText.indexOf(' ', startIndex);
-            if (endIndex === -1) {
+            // Search for whitespace (\s matches space, tab, newline, etc.) to determine the end of the word
+            // or punctuation or end of string.
+            // Improved regex to handle various word boundaries better.
+            const relativeEndIndex = currentText.slice(startIndex).search(/[\s.,;!?]/);
+            
+            let endIndex;
+            if (relativeEndIndex === -1) {
+                // If no boundary found, we are at the last word
                 endIndex = currentText.length;
+            } else {
+                endIndex = startIndex + relativeEndIndex;
             }
-            if (startIndex !== endIndex) { // Prevent highlighting empty space
+            
+            if (startIndex !== endIndex) {
                  setHighlightInfo({ startIndex, endIndex });
             }
         }
@@ -155,7 +163,15 @@ export const useSpeech = (rate: ReadingRate) => {
             
             // Try fallback voice selection
             if (voices.length > 0) {
-                const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+                let voice = voices.find(v => v.lang === lang);
+                if (!voice && lang === Language.Tamil) {
+                     // Try finding common Tamil voice names if exact lang match failed
+                     voice = voices.find(v => v.name.includes('Tamil') || v.lang.includes('ta'));
+                }
+                if (!voice) {
+                     voice = voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+                }
+                
                 if (voice) utterance.voice = voice;
             }
 
@@ -174,16 +190,29 @@ export const useSpeech = (rate: ReadingRate) => {
 
         // Attempt to select the best voice for the language
         if (voices.length > 0) {
-            const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+            let voice = voices.find(v => v.lang === lang);
+            
+            // Specific fallback logic for Tamil to prefer high-quality voices if available
+            if (lang === Language.Tamil) {
+                const tamilVoices = voices.filter(v => v.lang.includes('ta') || v.name.toLowerCase().includes('tamil'));
+                if (tamilVoices.length > 0) {
+                    // Prefer Google Tamil or other known good voices
+                    const preferred = tamilVoices.find(v => v.name.includes('Google') || v.name.includes('India'));
+                    voice = preferred || tamilVoices[0];
+                }
+            }
+
+            if (!voice) {
+                // Fallback to generic language code match
+                voice = voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+            }
+
             if (voice) {
                 console.log(`Selected voice: ${voice.name} for ${lang}`);
                 utterance.voice = voice;
             } else {
                 console.warn(`No specific voice found for ${lang}, relying on browser default for language.`);
                 // Explicitly ensuring voice is null/undefined to let browser use default language engine
-                // Some browsers might default to English if an explicit voice isn't set, but usually lang handles it.
-                // However, if we previously set a voice on a recycled object, clearing it is safer.
-                // Since we create a 'new' utterance every time, this is safe.
             }
         }
 
