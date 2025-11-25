@@ -65,14 +65,38 @@ jobs:
           fi
 
       - name: Create Release and Upload APK
-        uses: softprops/action-gh-release@v1
+        uses: actions/github-script@v7
         with:
-          files: ${{ env.APK_FILE }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const version = context.ref.replace('refs/tags/', '');
+            const apkFile = 'EyeZone-v' + version + '.apk';
+            
+            // Create release
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: version,
+              name: 'EyeZone ' + version,
+              draft: false,
+              prerelease: false,
+              generate_release_notes: true
+            });
+            
+            // Upload APK
+            const fileContent = fs.readFileSync(apkFile);
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.data.id,
+              name: apkFile,
+              data: fileContent
+            });
+            
+            console.log('✅ Release created and APK uploaded!');
+            console.log('📦 Download: ' + release.data.html_url)
 
       - name: Log APK download link
         run: |
