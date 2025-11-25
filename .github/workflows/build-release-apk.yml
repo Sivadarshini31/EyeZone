@@ -39,7 +39,12 @@ jobs:
       - name: Prepare Cordova www
         run: npm run cordova:prepare
 
-      - name: Create release build (debug APK)
+      - name: Add Android platform
+        run: |
+          cd "cd MyApp"
+          cordova platform add android
+
+      - name: Create debug build (signed debug APK)
         run: |
           cd "cd MyApp"
           cordova build android --debug
