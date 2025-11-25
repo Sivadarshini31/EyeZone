@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getAiChatResponse } from '../services/geminiService';
 import { Language } from '../types';
@@ -109,10 +110,8 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
     };
 
     recognition.onerror = (event: any) => {
-      // Ignore 'no-speech' and 'aborted'. 
-      // 'no-speech' means silence. 'aborted' can happen on stop/restart or focus change.
-      // We rely on onend to restart if we were listening.
-      if (event.error === 'no-speech' || event.error === 'aborted') {
+      // Ignore 'no-speech' (silence), 'aborted' (user stopped/interrupted), and 'network' (temporary connection issue).
+      if (event.error === 'no-speech' || event.error === 'aborted' || event.error === 'network') {
          return;
       }
 
@@ -131,8 +130,9 @@ const AiChatModal: React.FC<AiChatModalProps> = ({ isOpen, onClose, language }) 
       // Use ref to check status to avoid stale closure issues
       // Only restart if we were expecting to listen and no video is active (handled by onresult logic mainly, but safety here)
       if (isComponentOpen.current && statusRef.current === 'listening') {
-        console.log("AI chat listening ended (likely silence), restarting.");
-        startListening();
+        console.log("AI chat listening ended (likely silence or network glitch), restarting.");
+        // Short delay to allow network to recover if that was the cause
+        setTimeout(() => startListening(), 250);
       }
     };
 

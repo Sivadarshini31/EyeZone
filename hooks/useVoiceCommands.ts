@@ -65,9 +65,10 @@ export const useVoiceCommands = ({ commands, enabled, language, feedbackEnabled 
     };
 
     recognition.onerror = (event: any) => {
-      if (event.error === 'no-speech') {
-          // Ignore 'no-speech' error as it just means silence, which is normal.
-          // The onend handler will restart the service.
+      // Ignore common non-critical errors.
+      // 'no-speech': No sound detected.
+      // 'network': Network connection failed (common on mobile/unstable wifi).
+      if (event.error === 'no-speech' || event.error === 'network') {
           return;
       }
 

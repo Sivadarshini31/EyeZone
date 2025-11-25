@@ -9,9 +9,6 @@ export default defineConfig(({ mode }) => {
     base: '/',
     build: {
       outDir: 'dist',
-      rollupOptions: {
-        external: ['@google/genai'],
-      },
     },
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
