@@ -8,11 +8,24 @@
   },
   "scripts": {
     "dev": "vite",
+    "server": "node server/index.js",
+    "clean": "rm -rf dist",
     "build": "tsc && vite build",
+    "package:web": "npm run build",
+    "cordova:prepare": "mkdir -p \"cd MyApp/www\" && rsync -a dist/ \"cd MyApp/www/\"",
+    "cordova:build": "npm run cordova:prepare && (cd \"cd MyApp\" && cordova build || echo \"cordova not installed: skipping native build\")",
+    "package:cordova": "npm run cordova:build",
+    "package": "npm run package:web && npm run cordova:prepare",
+    "cordova:platform:add:android": "(cd \"cd MyApp\" && (command -v cordova >/dev/null 2>&1 && cordova platform add android) || echo 'cordova not installed: run \"npm i -g cordova\" and ensure Android SDK installed')",
+    "cordova:platform:add:ios": "(cd \"cd MyApp\" && (command -v cordova >/dev/null 2>&1 && cordova platform add ios) || echo 'cordova not installed: run \"npm i -g cordova\" and ensure Xcode installed')",
+    "cordova:platform:list": "(cd \"cd MyApp\" && (command -v cordova >/dev/null 2>&1 && cordova platform ls) || echo 'cordova not installed')",
+    "cordova:platform:remove:android": "(cd \"cd MyApp\" && (command -v cordova >/dev/null 2>&1 && cordova platform remove android) || echo 'cordova not installed')",
+    "cordova:platform:remove:ios": "(cd \"cd MyApp\" && (command -v cordova >/dev/null 2>&1 && cordova platform remove ios) || echo 'cordova not installed')",
+    "cordova:build:debug": "cd \"cd MyApp\" && cordova build android --debug",
+    "cordova:build:release": "cd \"cd MyApp\" && cordova build android --release",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^0.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -21,6 +34,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.5.3",
+    "@types/node": "^20.0.0",
     "vite": "^5.4.1"
   }
 }

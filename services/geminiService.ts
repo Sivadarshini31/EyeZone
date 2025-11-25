@@ -195,8 +195,34 @@ export const translateText = async (text: string, targetLang: 'Tamil' | 'English
 };
 
 export const getAiChatResponse = async (prompt: string, useThinkingMode: boolean): Promise<string> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    if (!prompt) return 'I did not hear your question. Please try again.';
+  // If a runtime flag is set on the window, route chat requests to the Claude proxy.
+  if ((globalThis as any).CLAUDE_ENABLED) {
+    try {
+      const resp = await fetch('/api/claude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, thinking: useThinkingMode }),
+      });
+
+      if (!resp.ok) throw new Error(`Claude proxy returned ${resp.status}`);
+
+      // Try parse as JSON, otherwise return raw text
+      const text = await resp.text();
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed?.text) return parsed.text;
+        return JSON.stringify(parsed);
+      } catch {
+        return text;
+      }
+    } catch (err) {
+      console.error('Claude proxy call failed:', err);
+      // fall through to Gemini fallback
+    }
+  }
+
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  if (!prompt) return 'I did not hear your question. Please try again.';
 
     // Use gemini-2.5-flash as default to support tools (like googleSearch), upgrade to pro for thinking
     const model = useThinkingMode ? 'gemini-3-pro-preview' : 'gemini-2.5-flash';
