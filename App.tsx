@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ContrastMode, ReadingRate, AppFile, ProcessedData, Language, Command } from './types';
 import MainScreen from './components/MainScreen';
@@ -36,11 +35,34 @@ const App: React.FC = () => {
   // Audio Unlocker for Mobile/APK
   useEffect(() => {
     const unlockAudio = () => {
-      // Create and immediately discard an AudioContext to unlock the audio subsystem on mobile
+      // Aggressive audio unlock for Android WebView
       if (typeof window !== 'undefined') {
-         // Also verify speech synthesis is ready
-         if (window.speechSynthesis) {
-             window.speechSynthesis.cancel(); // Clears any stuck pending utterances
+         try {
+            // 1. Wake up the AudioContext hardware
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContext) {
+                const ctx = new AudioContext();
+                const buffer = ctx.createBuffer(1, 1, 22050); // 1 sample buffer
+                const source = ctx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(ctx.destination);
+                source.start(0);
+                // Close it shortly after to clean up
+                setTimeout(() => {
+                    if (ctx.state !== 'closed') ctx.close();
+                }, 100);
+            }
+
+            // 2. Wake up the TTS engine
+            if (window.speechSynthesis) {
+                 window.speechSynthesis.cancel(); // Clears any stuck pending utterances
+                 // Speak a silent space to initialize the engine
+                 const utterance = new SpeechSynthesisUtterance(" ");
+                 utterance.volume = 0;
+                 window.speechSynthesis.speak(utterance);
+            }
+         } catch (e) {
+             console.error("Audio unlock failed", e);
          }
       }
       

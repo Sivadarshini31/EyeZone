@@ -1,4 +1,3 @@
-
 import { Language } from '../types';
 
 // Base64 encode/decode functions are required for Gemini audio processing
@@ -100,14 +99,15 @@ export const speakText = (text: string, lang: Language, onEnd?: () => void) => {
   
   // CRITICAL FIX FOR MOBILE/APK: 
   // We must add a small delay between cancel and speak, otherwise Android WebView
-  // often drops the speech command silently.
+  // often drops the speech command silently. 100ms is safe for most devices.
   setTimeout(() => {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = lang;
       utterance.volume = 1.0; // Force max volume
       utterance.rate = 1.0;   // Force normal rate for interface feedback
       
-      // Mobile browsers often need explicit voice selection to work reliably
+      // Mobile browsers often need explicit voice selection to work reliably.
+      // We fetch voices INSIDE the timeout because they might be loaded asynchronously.
       const voices = window.speechSynthesis.getVoices();
       if (voices.length > 0) {
           let voice = voices.find(v => v.lang === lang);
@@ -147,5 +147,5 @@ export const speakText = (text: string, lang: Language, onEnd?: () => void) => {
       activeUtterances.push(utterance);
       
       window.speechSynthesis.speak(utterance);
-  }, 50); // 50ms delay is usually sufficient
+  }, 100); // 100ms delay is safer for older Android WebViews
 };
