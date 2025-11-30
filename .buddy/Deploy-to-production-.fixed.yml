@@ -1,0 +1,7 @@
+- pipeline: sivadarshini
+  name: Deploy to production
+  refs:
+  - refs/heads/main
+  events:
+  - type: WEBHOOK
+  fail_on_prepare_env_warning: true
