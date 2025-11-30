@@ -5,3 +5,10 @@
   events:
   - type: WEBHOOK
   fail_on_prepare_env_warning: true
+  actions:
+  - action: gh auth status
+    type: GIT_HUB_CLI
+    integration: rk6DKxonz7gKd30Q5WBQj1ZR0G
+    execute_commands:
+    - gh auth status
+    shell: BASH
