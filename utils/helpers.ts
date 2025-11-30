@@ -98,47 +98,54 @@ export const speakText = (text: string, lang: Language, onEnd?: () => void) => {
   // Stop any previous speech to avoid overlap
   window.speechSynthesis.cancel();
   
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = lang;
-  
-  // Mobile browsers often need explicit voice selection to work reliably
-  const voices = window.speechSynthesis.getVoices();
-  if (voices.length > 0) {
-      let voice = voices.find(v => v.lang === lang);
-      if (!voice && lang === Language.Tamil) {
-          // Fallback search for Tamil by name or strict code
-          voice = voices.find(v => v.lang.includes('ta') || v.name.toLowerCase().includes('tamil'));
-      }
-      if (!voice) {
-          // Fallback to language code prefix (e.g., 'en' for 'en-US')
-          const shortLang = lang.split('-')[0];
-          voice = voices.find(v => v.lang.startsWith(shortLang));
-      }
+  // CRITICAL FIX FOR MOBILE/APK: 
+  // We must add a small delay between cancel and speak, otherwise Android WebView
+  // often drops the speech command silently.
+  setTimeout(() => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang;
+      utterance.volume = 1.0; // Force max volume
+      utterance.rate = 1.0;   // Force normal rate for interface feedback
       
-      if (voice) {
-          utterance.voice = voice;
+      // Mobile browsers often need explicit voice selection to work reliably
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+          let voice = voices.find(v => v.lang === lang);
+          if (!voice && lang === Language.Tamil) {
+              // Fallback search for Tamil by name or strict code
+              voice = voices.find(v => v.lang.includes('ta') || v.name.toLowerCase().includes('tamil'));
+          }
+          if (!voice) {
+              // Fallback to language code prefix (e.g., 'en' for 'en-US')
+              const shortLang = lang.split('-')[0];
+              voice = voices.find(v => v.lang.startsWith(shortLang));
+          }
+          
+          if (voice) {
+              utterance.voice = voice;
+          }
       }
-  }
 
-  utterance.onend = () => {
-    if (onEnd) onEnd();
-    // Remove from active array to allow GC
-    const index = activeUtterances.indexOf(utterance);
-    if (index > -1) {
-        activeUtterances.splice(index, 1);
-    }
-  };
+      utterance.onend = () => {
+        if (onEnd) onEnd();
+        // Remove from active array to allow GC
+        const index = activeUtterances.indexOf(utterance);
+        if (index > -1) {
+            activeUtterances.splice(index, 1);
+        }
+      };
 
-  utterance.onerror = (e) => {
-      console.error("Speech synthesis error:", e);
-      const index = activeUtterances.indexOf(utterance);
-      if (index > -1) {
-          activeUtterances.splice(index, 1);
-      }
-  };
+      utterance.onerror = (e) => {
+          console.error("Speech synthesis error:", e);
+          const index = activeUtterances.indexOf(utterance);
+          if (index > -1) {
+              activeUtterances.splice(index, 1);
+          }
+      };
 
-  // Add to global array to prevent GC
-  activeUtterances.push(utterance);
-  
-  window.speechSynthesis.speak(utterance);
+      // Add to global array to prevent GC (Android WebView Fix)
+      activeUtterances.push(utterance);
+      
+      window.speechSynthesis.speak(utterance);
+  }, 50); // 50ms delay is usually sufficient
 };

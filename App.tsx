@@ -33,6 +33,32 @@ const App: React.FC = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   
+  // Audio Unlocker for Mobile/APK
+  useEffect(() => {
+    const unlockAudio = () => {
+      // Create and immediately discard an AudioContext to unlock the audio subsystem on mobile
+      if (typeof window !== 'undefined') {
+         // Also verify speech synthesis is ready
+         if (window.speechSynthesis) {
+             window.speechSynthesis.cancel(); // Clears any stuck pending utterances
+         }
+      }
+      
+      // Remove listeners once unlocked
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+
+    // Listen for the first interaction anywhere in the app
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+
+    return () => {
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
+
   const handleBack = useCallback(() => {
     setView('main');
     setProcessedData(null);
